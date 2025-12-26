@@ -1,0 +1,494 @@
+# Aplikasi ERP POS Multi Role dengan Sistem Outlet dan Manajemen Produk Varian
+
+## Deskripsi
+Aplikasi Point of Sale (POS) multi-outlet dengan sistem role-based access control untuk mengelola beberapa toko dengan hierarki pengguna yang berbeda dan konfigurasi akses menu yang dapat disesuaikan.
+
+## Sistem Role dan Akses
+
+### Role Pengguna
+- **Owner (#owner)**: Akses penuh ke semua outlet, pengguna, dan laporan
+- **Manager (#manager)**: Akses terbatas pada outlet yang ditugaskan
+- **Cashier (#cashier)**: Akses terbatas pada transaksi POS dan data pribadi
+
+### Kontrol Akses
+- **Owner** dapat:
+  - Mengelola semua outlet (tambah, edit, hapus)
+  - Mengelola semua pengguna di semua outlet
+  - Melihat laporan penjualan dan produk dari semua outlet
+  - Melihat statistik agregat semua outlet
+  - Mengakses halaman Manajemen Staf untuk mengelola semua pengguna
+  - **Mengelola produk, paket, dan bundle (tambah, edit, hapus) di semua outlet**
+  - **Mengelola kategori dan brand produk (tambah, edit, hapus)**
+  - **Mengelola stok di semua outlet (tambah, kurangi, transfer antar outlet)**
+  - **Melihat analisis penjualan berdasarkan metode pembayaran**
+  - **Melihat statistik pendapatan per jenis pembayaran**
+  - **Mengkonfigurasi akses menu dan fitur untuk setiap role pengguna melalui halaman Settings**
+- **Manager** dapat:
+  - Mengelola hanya outlet yang ditugaskan
+  - Melihat transaksi outlet mereka
+  - **Melihat produk, paket, dan bundle di outlet mereka (read-only)**
+  - **Melihat kategori dan brand produk (read-only)**
+  - Mengelola staff (cashier) di outlet mereka
+  - **Mengelola stok hanya di outlet yang ditugaskan (tambah, kurangi, transfer dari/ke outlet mereka)**
+  - **Melihat laporan penjualan berdasarkan metode pembayaran untuk outlet mereka**
+  - Tidak dapat melihat data outlet lain
+  - **Akses menu dibatasi berdasarkan konfigurasi owner**
+- **Cashier** dapat:
+  - Melakukan transaksi POS
+  - **Memilih metode pembayaran saat checkout dengan sistem tab Offline, Online, dan Food Delivery**
+  - **Menggunakan fitur split payment untuk menggabungkan beberapa metode pembayaran dalam satu transaksi**
+  - Melihat daftar transaksi mereka sendiri
+  - **Melihat daftar produk, paket, dan bundle outlet mereka (read-only)**
+  - **Melihat kategori dan brand produk (read-only)**
+  - **Melihat stok produk, paket, dan bundle outlet mereka (read-only)**
+  - Statistik terbatas (transaksi hari ini)
+  - **Akses menu dibatasi berdasarkan konfigurasi owner**
+
+## Fitur Utama
+
+### Autentikasi dan Manajemen Pengguna
+- Login dengan username dan password
+- Registrasi pengguna baru dengan assignment role dan outlet
+- Session management dengan role-based access
+- Manajemen pengguna berdasarkan hierarki role
+
+### Manajemen Staf (Owner Only)
+- Halaman khusus "Manajemen Staf" untuk owner di `/pages/StaffManagementPage.tsx`
+- Menampilkan daftar semua pengguna dengan informasi:
+  - Nama lengkap
+  - Role (Owner/Manager/Cashier)
+  - Outlet yang ditugaskan
+- Fitur untuk owner:
+  - Menambahkan staf baru dengan form (nama, role, outlet assignment)
+  - **Mengubah profil staf existing dengan tombol "Edit" di setiap baris**
+  - **Modal atau formulir inline untuk edit dengan field nama, role, dan outlet assignment**
+  - **Select.Item components dengan value props yang valid dan non-empty untuk role dan outlet selection**
+  - **Mapping yang benar dari role dan outlet yang dipilih ke default values yang terdefinisi**
+  - **Validasi placeholder yang muncul hanya ketika tidak ada selection, bukan sebagai empty value**
+  - **Validasi hak akses owner untuk operasi edit**
+  - **Notifikasi berhasil/gagal setelah update**
+  - **Auto-refresh daftar staf setelah perubahan berhasil**
+  - Menghapus staf dari sistem
+- Interface menggunakan tabel dengan modal form untuk konsistensi
+- Akses terbatas hanya untuk owner
+- **React Query mutation untuk operasi update staf**
+
+### Pengaturan Akses Menu (Settings) - Owner Only
+- **Halaman Settings khusus untuk owner di `/pages/SettingsPage.tsx`**
+- **Konfigurasi akses menu per role dengan interface yang user-friendly**:
+  - **Tabel atau grid dengan role sebagai kolom (Manager, Cashier) dan menu sebagai baris**
+  - **Toggle atau checkbox untuk setiap kombinasi role-menu**
+  - **Menu yang dapat dikonfigurasi**: Dashboard, POS, Produk, Laporan, Manajemen Stok, Manajemen Staf, Outlet, Kategori & Brand, Settings
+- **Fitur konfigurasi**:
+  - **Toggle akses untuk setiap menu per role**
+  - **Preset konfigurasi default untuk role baru**
+  - **Validasi bahwa owner selalu memiliki akses penuh**
+  - **Preview perubahan sebelum menyimpan**
+  - **Reset ke konfigurasi default**
+- **Penyimpanan konfigurasi ke backend dengan validasi keamanan**
+- **Auto-refresh navigasi setelah perubahan konfigurasi**
+- **Notifikasi berhasil/gagal untuk operasi konfigurasi**
+
+### Dashboard Multi-Role
+- **Dashboard Owner**:
+  - Ringkasan agregat semua outlet (total pendapatan, jumlah transaksi)
+  - Daftar outlet dengan performa masing-masing
+  - Produk terlaris di semua outlet
+  - Outlet dengan performa terbaik
+  - **Statistik pendapatan berdasarkan metode pembayaran dengan kategori Offline, Online, dan Food Delivery**
+- **Dashboard Manager**:
+  - Ringkasan performa outlet yang ditugaskan
+  - Level stok produk di outlet
+  - Daftar staff (cashier) dan aktivitas mereka
+  - Statistik penjualan outlet
+- **Dashboard Cashier**:
+  - Transaksi hari ini
+  - Aksi POS cepat
+  - Statistik terbatas (jumlah transaksi pribadi)
+
+### Manajemen Outlet
+- Tambah outlet baru dengan nama dan alamat (Owner only)
+- Edit informasi outlet (Owner/Manager)
+- Assignment pengguna ke outlet
+- Daftar semua outlet dengan informasi dasar
+
+### Manajemen Kategori dan Brand Produk
+- **Submenu "Kategori & Brand" di bawah bagian produk**
+- **Owner dapat mengelola kategori produk**:
+  - Tambah kategori baru dengan nama dan deskripsi
+  - Edit kategori existing
+  - Hapus kategori (dengan validasi tidak ada produk yang menggunakan)
+- **Owner dapat mengelola brand produk**:
+  - Tambah brand baru dengan nama dan deskripsi
+  - Edit brand existing
+  - Hapus brand (dengan validasi tidak ada produk yang menggunakan)
+- **Manager dan Cashier**: Hanya melihat daftar kategori dan brand (read-only)
+- **Daftar kategori dan brand dengan pencarian dan filter**
+- **Validasi duplikasi nama kategori dan brand**
+
+### Manajemen Produk Terpadu dengan Sistem Produk, Paket, dan Bundle
+- **Halaman ProductsPage terpadu dengan tiga tab**: "Produk" (satuan), "Paket", dan "Bundle"
+- **Owner**: Tambah, edit, dan hapus produk, paket, dan bundle di semua outlet
+- **Manager dan Cashier**: Hanya melihat daftar produk, paket, dan bundle (read-only)
+- **Toolbar CRUD konsisten di semua tab hanya untuk owner**
+- **Manager dan cashier melihat semua tab tanpa tombol tambah, edit, atau hapus**
+- **Form produk dengan dropdown untuk memilih kategori dan brand**
+- **Daftar produk menampilkan informasi kategori dan brand**
+- **Filter produk berdasarkan kategori dan brand**
+- Daftar produk dengan filter berdasarkan outlet
+- Pencarian produk berdasarkan nama, kategori, brand, dan outlet
+- **Modal Form Tambah/Edit Produk yang Diperbaiki**:
+  - **Modal pop-up lengkap dengan semua field yang diperlukan**
+  - **Input Nama Produk (wajib diisi)**
+  - **Input Deskripsi Produk (opsional)**
+  - **Dropdown Kategori dengan daftar kategori aktif dari backend**:
+    - **Setiap Select.Item memiliki value berupa ID kategori dalam bentuk string yang valid (non-empty)**
+    - **Placeholder awal "Pilih Kategori" dengan value="none"**
+    - **Default value "none" jika kategori belum dipilih**
+    - **Validasi sebelum menyimpan bahwa kategori harus memiliki nilai yang bukan "none"**
+    - **Pengecekan data kategori sudah termuat sebelum menampilkan dropdown untuk mencegah kondisi undefined**
+  - **Dropdown Brand dengan daftar brand aktif dari backend**:
+    - **Setiap Select.Item memiliki value berupa ID brand dalam bentuk string yang valid (non-empty)**
+    - **Placeholder awal "Pilih Brand" dengan value="none"**
+    - **Default value "none" jika brand belum dipilih**
+    - **Validasi sebelum menyimpan bahwa brand harus memiliki nilai yang bukan "none"**
+    - **Pengecekan data brand sudah termuat sebelum menampilkan dropdown untuk mencegah kondisi undefined**
+  - **Section Inventory & Stock Management**:
+    - **Input Stok (angka, wajib untuk produk satuan)**
+    - **Toggle Status Aktif/Nonaktif**
+  - **Input SKU (dihasilkan otomatis jika kosong)**
+  - **Input Harga Produk (wajib diisi)**
+  - **Section Data Varian (opsional)**:
+    - **Input Deskripsi Varian**
+    - **Input SKU per Varian**
+  - **Input HPP Rata-rata (Avg Cost) - dapat dihitung otomatis atau diisi manual**
+  - **Validasi semua field wajib sebelum submit termasuk kategori dan brand tidak boleh "none"**
+  - **Integrasi dengan API backend produk yang sudah ada**
+  - **Modal berfungsi untuk create dan edit produk**
+  - **Form tidak blank dan menampilkan semua field dengan benar**
+- **Sistem Produk Paket**:
+  - **Produk dapat berupa "Satuan" atau "Paket"**
+  - **Produk Paket terdiri dari beberapa produk satuan sebagai komponen**
+  - **Form tambah/edit produk paket dengan pemilihan produk satuan dan kuantitas masing-masing**
+  - **Validasi hanya produk satuan yang sudah ada yang bisa dijadikan komponen paket**
+  - **Stok produk paket dihitung otomatis berdasarkan ketersediaan produk komponen dengan sinkronisasi real-time**
+  - **Tampilan daftar produk dengan indikator jenis (Satuan/Paket) dan komponen paket**
+  - **Update otomatis stok paket di frontend saat stok komponen berubah**
+- **Sistem Bundle Baru**:
+  - **Bundle dapat terdiri dari kombinasi produk satuan dan produk paket**
+  - **Form tambah/edit bundle dengan pemilihan produk satuan dan/atau paket dengan kuantitas masing-masing**
+  - **Validasi minimal satu komponen (produk satuan atau paket) untuk bundle**
+  - **Stok bundle dihitung otomatis berdasarkan ketersediaan semua komponen (produk satuan dan paket) dengan sinkronisasi real-time**
+  - **Tampilan daftar bundle dengan indikator komponen (produk satuan dan paket)**
+  - **Update otomatis stok bundle di frontend saat stok komponen berubah**
+- **UI konsisten di semua tab dengan reactive stock updates**
+
+### Manajemen Stok dengan Sistem Produk, Paket, dan Bundle Otomatis dan Sinkronisasi Real-time
+- **Halaman atau tab "Manajemen Stok" untuk owner dan manager**
+- **Tabel produk, paket, dan bundle per outlet dengan informasi stok saat ini yang terupdate secara real-time**
+- **Tombol aksi stok untuk setiap produk**:
+  - **Tambah Stok**: Modal input jumlah stok yang akan ditambahkan (hanya untuk produk satuan)
+  - **Kurangi Stok**: Modal input jumlah stok yang akan dikurangi (hanya untuk produk satuan)
+  - **Pindahkan Stok**: Modal input jumlah dan outlet tujuan untuk transfer (hanya untuk produk satuan)
+- **Modal input sederhana dengan validasi**:
+  - Input jumlah stok (wajib, angka positif)
+  - Select outlet tujuan untuk transfer stok
+  - Tombol konfirmasi dan batal
+- **Kontrol akses berbasis role**:
+  - Owner: Akses penuh ke semua outlet untuk operasi stok
+  - Manager: Hanya outlet yang ditugaskan
+  - Cashier: Read-only, tidak ada tombol aksi stok
+- **React Query untuk operasi stok dan auto-refresh setelah berhasil**
+- **Notifikasi berhasil/gagal untuk setiap operasi stok**
+- **Sistem Stok Paket dan Bundle Otomatis dengan Sinkronisasi Real-time**:
+  - **Stok produk paket dihitung otomatis dari produk komponen dengan logika yang akurat**
+  - **Stok bundle dihitung otomatis dari semua komponen (produk satuan dan paket) dengan logika yang akurat**
+  - **Saat stok produk satuan berubah, stok semua paket dan bundle yang menggunakan produk tersebut otomatis diperbarui secara real-time di frontend**
+  - **Saat stok paket berubah, stok semua bundle yang menggunakan paket tersebut otomatis diperbarui secara real-time di frontend**
+  - **Tampilan stok paket dan bundle menunjukkan jumlah maksimal yang bisa dibuat berdasarkan komponen yang paling terbatas**
+  - **Indikator visual untuk produk paket dan bundle yang stoknya terbatas oleh komponen tertentu**
+  - **Auto-refresh tampilan stok paket dan bundle setelah setiap perubahan stok komponen**
+
+### Transaksi POS dengan Sistem Pembayaran Tab Offline/Online/Food Delivery dan Produk, Paket, Bundle
+- Interface untuk memilih produk, paket, dan bundle dari outlet cashier
+- Input jumlah produk yang dibeli
+- Kalkulasi otomatis total harga
+- **Sistem pembayaran dengan tiga tab utama**:
+  - **Tab Offline**: Tunai, Kartu Debit/Kredit, Transfer Bank
+  - **Tab Online**: eWallet (OVO, GoPay, DANA, dll), QRIS
+  - **Tab Food Delivery**: ShopeeFood, GoFood, GrabFood, MaximFood, TikTok
+- **Fitur Split Payment**:
+  - **Kemampuan untuk menggabungkan beberapa metode pembayaran dalam satu transaksi**
+  - **Interface untuk menambah metode pembayaran kedua, ketiga, dst**
+  - **Input jumlah untuk setiap metode pembayaran**
+  - **Validasi total pembayaran harus sama dengan total belanja**
+  - **Tampilan ringkasan semua metode pembayaran yang dipilih**
+- **UI pemilihan metode pembayaran yang user-friendly dengan tab dan ikon**
+- Konfirmasi dan simpan transaksi dengan outlet ID dan metode pembayaran (tunggal atau split)
+- **Update stok produk secara otomatis per outlet dengan sistem produk, paket, dan bundle yang akurat**:
+  - **Transaksi produk satuan mengurangi stok langsung**
+  - **Transaksi produk paket mengurangi stok semua produk komponen sesuai kuantitas dengan perhitungan yang tepat**
+  - **Transaksi bundle mengurangi stok semua komponen (produk satuan dan paket) sesuai kuantitas dengan perhitungan yang tepat**
+  - **Validasi ketersediaan stok untuk produk paket dan bundle sebelum transaksi**
+  - **Update real-time stok paket dan bundle di frontend setelah transaksi berhasil**
+- Cetak atau tampilkan struk dengan informasi outlet dan semua metode pembayaran
+
+### Laporan Penjualan Multi-Outlet dengan Kategori Pembayaran Offline/Online/Food Delivery
+- **Owner**: Laporan semua outlet dengan agregasi data
+- **Manager**: Laporan outlet yang ditugaskan saja
+- **Cashier**: Laporan transaksi pribadi saja
+- Filter laporan berdasarkan tanggal dan outlet
+- **Filter laporan berdasarkan kategori pembayaran (Offline/Online/Food Delivery)**
+- **Filter laporan berdasarkan kategori dan brand produk**
+- **Analisis distribusi penjualan dengan kategori Offline, Online, dan Food Delivery**
+- **Sub-kategori dalam Online**: eWallet, QRIS
+- **Sub-kategori dalam Food Delivery**: ShopeeFood, GoFood, GrabFood, MaximFood, TikTok
+- **Grafik atau statistik pendapatan per kategori pembayaran untuk owner**
+- **Laporan penjualan per kategori dan brand produk**
+- Total penjualan per periode per outlet
+- **Total penjualan per kategori pembayaran dengan breakdown sub-kategori**
+- **Laporan split payment menampilkan detail kombinasi metode pembayaran**
+- **Laporan Inventori dengan Sistem Produk, Paket, dan Bundle**:
+  - **Laporan stok produk satuan, paket, dan bundle per outlet**
+  - **Analisis pergerakan stok produk komponen dalam paket dan bundle**
+  - **Laporan produk paket dan bundle yang sering kehabisan stok karena komponen tertentu**
+  - **Statistik penjualan produk satuan vs paket vs bundle**
+
+### Navigasi Role-Based Dinamis
+- **Menu navigasi yang dinamis berdasarkan konfigurasi akses dari owner**
+- **Navigasi default**:
+  - Owner: Dashboard, Outlet, Pengguna, Produk, **Kategori & Brand**, **Manajemen Stok**, Transaksi, Laporan, **Manajemen Staf**, **Settings**
+  - Manager: Dashboard, Produk, **Kategori & Brand** (read-only), **Manajemen Stok**, Staff, Transaksi, Laporan
+  - Cashier: Dashboard, POS, Transaksi Saya
+- **Sistem navigasi adaptif**:
+  - **Load konfigurasi akses saat aplikasi dimuat**
+  - **Filter menu berdasarkan role dan konfigurasi owner**
+  - **Update navigasi secara real-time saat konfigurasi berubah**
+  - **Validasi akses halaman berdasarkan konfigurasi**
+  - **Redirect ke halaman yang diizinkan jika akses ditolak**
+
+## Data yang Disimpan di Backend
+- **Pengguna**: username, password (hashed), nama lengkap, role, outlet_id (untuk manager/cashier)
+- **Outlet**: nama, alamat, tanggal dibuat, status aktif
+- **Kategori**: nama, deskripsi, tanggal dibuat, status aktif
+- **Brand**: nama, deskripsi, tanggal dibuat, status aktif
+- **Produk**: nama, **deskripsi**, harga, stok tersedia (hanya untuk produk satuan), outlet_id, kategori_id, brand_id, **sku**, **hpp_rata_rata**, **status_aktif**, **deskripsi_varian**, **sku_varian**, tanggal dibuat, **jenis_produk (Satuan/Paket/Bundle)**
+- **Komponen Paket**: produk_paket_id, produk_satuan_id, kuantitas_diperlukan
+- **Komponen Bundle**: bundle_id, komponen_id (produk satuan atau paket), jenis_komponen (Satuan/Paket), kuantitas_diperlukan
+- **Transaksi**: tanggal/waktu, ID pengguna, outlet_id, daftar produk dengan jumlah, total harga, **daftar metode pembayaran dengan jumlah masing-masing (untuk split payment)**, **kategori pembayaran (Offline/Online/Food Delivery)**, **sub-kategori (eWallet, QRIS untuk Online; ShopeeFood, GoFood, GrabFood, MaximFood, TikTok untuk Food Delivery)**
+- **Log Stok**: ID produk, outlet, jenis operasi (tambah/kurangi/transfer/transaksi_paket/transaksi_bundle), jumlah, tanggal/waktu, ID pengguna, **referensi_transaksi_id (untuk tracking perubahan stok dari transaksi paket dan bundle)**
+- **Konfigurasi Akses Menu**: role, menu_name, is_accessible (boolean), tanggal_dibuat, tanggal_diubah
+
+## Operasi Backend
+- Autentikasi pengguna dengan role-based access control
+- CRUD operasi untuk outlet (dengan kontrol akses)
+- **CRUD operasi untuk kategori produk hanya untuk owner (addCategory, updateCategory, deleteCategory)**
+- **CRUD operasi untuk brand produk hanya untuk owner (addBrand, updateBrand, deleteBrand)**
+- **Read-only akses kategori dan brand untuk manager dan cashier**
+- **CRUD operasi untuk produk, paket, dan bundle hanya untuk owner (addProduct, updateProduct, deleteProduct)**:
+  - **API `addProduct` menerima semua field produk termasuk deskripsi, kategori_id, brand_id, sku, hpp_rata_rata, status_aktif, deskripsi_varian, sku_varian**
+  - **API `updateProduct` untuk mengubah semua field produk yang dapat diedit**
+  - **Validasi field wajib: nama, harga, stok (untuk produk satuan)**
+  - **Auto-generate SKU jika tidak diisi**
+  - **Validasi kategori_id dan brand_id harus valid atau null**
+  - **Penyimpanan data varian produk jika ada**
+- **Read-only akses produk, paket, dan bundle untuk manager dan cashier**
+- CRUD operasi untuk pengguna dengan assignment outlet
+- **Simpan transaksi penjualan per outlet dengan sistem split payment dan update stok yang akurat untuk produk, paket, dan bundle**
+- **API `createTransaction` yang menerima array metode pembayaran dengan jumlah masing-masing**
+- **Klasifikasi otomatis metode pembayaran ke kategori Offline/Online/Food Delivery dan sub-kategori**
+- **Validasi total split payment harus sama dengan total transaksi**
+- Query laporan penjualan dengan filter outlet dan role
+- **Query laporan penjualan dengan filter kategori pembayaran (Offline/Online/Food Delivery)**
+- **Query laporan penjualan dengan filter kategori dan brand produk**
+- **Kalkulasi statistik pendapatan per kategori dan sub-kategori pembayaran**
+- **API untuk mendapatkan breakdown split payment dalam laporan**
+- Kalkulasi statistik dashboard berdasarkan role dan akses outlet
+- API untuk manajemen staf: `assignCallerUserRole` dan `saveCallerUserProfile`
+- **API `updateUserProfile` untuk mengubah data staf (nama, role, outlet assignment)**
+- **Validasi hak akses owner untuk operasi update staf**
+- **Validasi hak akses owner untuk semua operasi CRUD produk, kategori, dan brand**
+- **Validasi penghapusan kategori dan brand (tidak boleh ada produk yang menggunakan)**
+- Operasi untuk menambah, mengubah, dan menghapus pengguna (owner only)
+- Query daftar semua pengguna dengan informasi role dan outlet
+- **API untuk mendapatkan daftar kategori aktif dan brand aktif untuk dropdown form produk**
+- **API Manajemen Stok**:
+  - **`addStock(productId: Nat, quantity: Nat)`**: Menambah stok produk satuan dengan validasi hak akses
+  - **`reduceStock(productId: Nat, quantity: Nat)`**: Mengurangi stok produk satuan dengan validasi hak akses
+  - **`transferStock(productId: Nat, fromOutletId: Nat, toOutletId: Nat, quantity: Nat)`**: Transfer stok antar outlet
+  - **Validasi hak akses**: Owner akses penuh, Manager hanya outlet yang ditugaskan, Cashier read-only
+  - **Pencatatan log perubahan stok untuk audit trail**
+- **API Sistem Paket dan Bundle dengan Sinkronisasi Stok yang Diperbaiki**:
+  - **`addProductPackage(name: Text, price: Nat, components: [(productId: Nat, quantity: Nat)])`**: Membuat produk paket baru
+  - **`updateProductPackage(packageId: Nat, components: [(productId: Nat, quantity: Nat)])`**: Update komponen produk paket
+  - **`addBundle(name: Text, price: Nat, components: [(componentId: Nat, componentType: Text, quantity: Nat)])`**: Membuat bundle baru dengan komponen produk satuan dan/atau paket
+  - **`updateBundle(bundleId: Nat, components: [(componentId: Nat, componentType: Text, quantity: Nat)])`**: Update komponen bundle
+  - **`calculatePackageStock(packageId: Nat, outletId: Nat)`**: Hitung stok tersedia untuk produk paket dengan logika yang diperbaiki dan akurat
+  - **`calculateBundleStock(bundleId: Nat, outletId: Nat)`**: Hitung stok tersedia untuk bundle berdasarkan komponen produk satuan dan paket
+  - **`getPackageComponents(packageId: Nat)`**: Mendapatkan daftar komponen produk paket
+  - **`getBundleComponents(bundleId: Nat)`**: Mendapatkan daftar komponen bundle (produk satuan dan paket)
+  - **`recalculateAllPackageStocks(outletId: Nat)`**: Recalculate semua stok paket saat ada perubahan stok komponen
+  - **`recalculateAllBundleStocks(outletId: Nat)`**: Recalculate semua stok bundle saat ada perubahan stok komponen
+  - **Validasi komponen paket hanya boleh produk satuan yang sudah ada**
+  - **Validasi komponen bundle boleh produk satuan dan/atau paket yang sudah ada**
+  - **Auto-update stok paket dan bundle saat stok produk satuan berubah dengan sinkronisasi real-time yang diperbaiki**
+  - **Auto-update stok bundle saat stok paket berubah dengan sinkronisasi real-time**
+  - **Validasi ketersediaan stok komponen sebelum transaksi paket dan bundle dengan perhitungan yang akurat**
+  - **Update stok komponen saat transaksi paket dan bundle berhasil dengan logika pengurangan yang tepat**
+  - **Trigger otomatis recalculation stok paket dan bundle setelah setiap perubahan stok produk satuan dan paket**
+- **API Konfigurasi Akses Menu (Owner Only)**:
+  - **`getMenuAccessConfig()`**: Mendapatkan konfigurasi akses menu untuk semua role
+  - **`updateMenuAccessConfig(role: Text, menuAccess: [(menuName: Text, isAccessible: Bool)])`**: Update konfigurasi akses menu untuk role tertentu
+  - **`resetMenuAccessConfig(role: Text)`**: Reset konfigurasi akses menu ke default untuk role tertentu
+  - **`getDefaultMenuAccess(role: Text)`**: Mendapatkan konfigurasi akses menu default untuk role
+  - **Validasi hanya owner yang dapat mengakses API konfigurasi**
+  - **Validasi role yang valid (Manager, Cashier)**
+  - **Validasi menu yang valid sesuai dengan daftar menu aplikasi**
+  - **Penyimpanan konfigurasi dengan timestamp untuk audit**
+
+## Antarmuka Pengguna
+- Desain responsif yang berfungsi di desktop dan mobile
+- Interface yang disesuaikan dengan role pengguna
+- **Navigasi dinamis berdasarkan hak akses dan konfigurasi owner**
+- Indikator outlet aktif untuk manager dan cashier
+- Bahasa Indonesia untuk semua teks dan label
+- Halaman Manajemen Staf dengan tabel dan modal form yang konsisten dengan desain sistem
+- **Tombol "Edit" di setiap baris tabel staf**
+- **Modal atau formulir inline untuk edit staf dengan validasi**
+- **Select components dengan value props yang benar untuk role dan outlet selection**
+- **Default value mapping yang tepat untuk mencegah empty string values**
+- **Placeholder handling yang benar untuk Select components**
+- **Notifikasi toast untuk feedback operasi update**
+- **React Query mutation di useQueries.ts untuk update staf**
+- **Halaman Settings (Owner Only) dengan**:
+  - **Tabel konfigurasi akses dengan role sebagai kolom dan menu sebagai baris**
+  - **Toggle switch atau checkbox untuk setiap kombinasi role-menu**
+  - **Daftar menu yang dapat dikonfigurasi**: Dashboard, POS, Produk, Laporan, Manajemen Stok, Manajemen Staf, Outlet, Kategori & Brand, Settings
+  - **Section untuk Manager dan Cashier dengan kontrol akses terpisah**
+  - **Tombol "Simpan Konfigurasi" untuk menyimpan perubahan**
+  - **Tombol "Reset ke Default" untuk mengembalikan konfigurasi default**
+  - **Preview perubahan sebelum menyimpan**
+  - **Validasi bahwa owner selalu memiliki akses penuh (tidak dapat diubah)**
+  - **Loading state saat menyimpan konfigurasi**
+  - **Notifikasi berhasil/gagal untuk operasi konfigurasi**
+  - **Auto-refresh navigasi setelah konfigurasi berhasil disimpan**
+- **Halaman ProductsPage terpadu dengan tiga tab konsisten**: "Produk" (satuan), "Paket", dan "Bundle"
+- **Toolbar CRUD yang konsisten di semua tab hanya muncul untuk owner**
+- **Interface read-only untuk manager dan cashier di semua tab produk**
+- **Tampilan stok produk, paket, dan bundle yang terupdate secara real-time saat stok komponen berubah**
+- **Modal Form Tambah/Edit Produk yang Diperbaiki dengan Validasi Dropdown yang Ketat**:
+  - **Modal pop-up lengkap yang tidak blank dengan semua field yang diperlukan**
+  - **Input Nama Produk dengan label "Nama Produk" dan validasi required**
+  - **Textarea Deskripsi Produk dengan label "Deskripsi" (opsional)**
+  - **Dropdown Kategori dengan label "Kategori" dan opsi dari daftar kategori aktif backend**:
+    - **Setiap Select.Item memiliki value berupa ID kategori dalam bentuk string yang valid (non-empty)**
+    - **Placeholder awal Select.Item dengan value="none" dan text "Pilih Kategori"**
+    - **Default value diset ke "none" jika kategori belum dipilih atau saat create produk baru**
+    - **Saat edit produk, default value diset ke ID kategori yang sudah ada atau "none" jika tidak ada**
+    - **Pengecekan data kategori sudah termuat sebelum menampilkan dropdown untuk mencegah kondisi undefined**
+    - **Validasi sebelum menyimpan bahwa kategori harus memiliki nilai yang bukan "none"**
+    - **Tidak ada logika yang menghasilkan value kosong string ""**
+  - **Dropdown Brand dengan label "Brand" dan opsi dari daftar brand aktif backend**:
+    - **Setiap Select.Item memiliki value berupa ID brand dalam bentuk string yang valid (non-empty)**
+    - **Placeholder awal Select.Item dengan value="none" dan text "Pilih Brand"**
+    - **Default value diset ke "none" jika brand belum dipilih atau saat create produk baru**
+    - **Saat edit produk, default value diset ke ID brand yang sudah ada atau "none" jika tidak ada**
+    - **Pengecekan data brand sudah termuat sebelum menampilkan dropdown untuk mencegah kondisi undefined**
+    - **Validasi sebelum menyimpan bahwa brand harus memiliki nilai yang bukan "none"**
+    - **Tidak ada logika yang menghasilkan value kosong string ""**
+  - **Section "Inventory & Stock Management" dengan**:
+    - **Input Stok dengan label "Stok" (angka, wajib untuk produk satuan)**
+    - **Toggle Status dengan label "Status Aktif" (default aktif)**
+  - **Input SKU dengan label "SKU" (auto-generate jika kosong)**
+  - **Input Harga dengan label "Harga Produk" dan validasi required**
+  - **Section "Data Varian" (collapsible/opsional) dengan**:
+    - **Input Deskripsi Varian dengan label "Deskripsi Varian"**
+    - **Input SKU Varian dengan label "SKU Varian"**
+  - **Input HPP dengan label "HPP Rata-rata (Avg Cost)" (dapat dihitung otomatis atau manual)**
+  - **Tombol "Simpan" dan "Batal" di bagian bawah modal**
+  - **Validasi form sebelum submit dengan pesan error yang jelas termasuk kategori dan brand tidak boleh "none"**
+  - **Loading state saat submit ke backend**
+  - **Notifikasi berhasil/gagal setelah operasi**
+  - **Auto-refresh daftar produk setelah berhasil tambah/edit**
+  - **Modal dapat digunakan untuk create produk baru dan edit produk existing**
+  - **Pre-fill data saat edit produk dengan nilai yang sudah ada**
+- **Halaman Kategori & Brand dengan**:
+  - **Tab atau section terpisah untuk kategori dan brand**
+  - **Tabel daftar kategori dan brand dengan kolom nama, deskripsi, tanggal dibuat**
+  - **Tombol tambah, edit, dan hapus hanya untuk owner**
+  - **Modal form untuk tambah/edit kategori dan brand**
+  - **Validasi duplikasi nama dan konfirmasi penghapusan**
+  - **Pencarian dan filter untuk kategori dan brand**
+  - **Interface read-only untuk manager dan cashier**
+- **Form produk dengan**:
+  - **Dropdown kategori dengan opsi "Pilih Kategori" sebagai placeholder dengan value="none"**
+  - **Dropdown brand dengan opsi "Pilih Brand" sebagai placeholder dengan value="none"**
+  - **Radio button atau toggle untuk memilih jenis produk (Satuan/Paket/Bundle)**
+  - **Section khusus untuk produk paket dengan pemilihan komponen**:
+    - **Dropdown produk satuan yang tersedia**
+    - **Input kuantitas untuk setiap komponen**
+    - **Tombol tambah/hapus komponen**
+    - **Validasi minimal satu komponen untuk produk paket**
+  - **Section khusus untuk bundle dengan pemilihan komponen**:
+    - **Dropdown produk satuan dan paket yang tersedia**
+    - **Input kuantitas untuk setiap komponen**
+    - **Tombol tambah/hapus komponen**
+    - **Validasi minimal satu komponen untuk bundle**
+  - **Validasi pemilihan kategori dan brand harus bukan "none" sebelum menyimpan**
+  - **Auto-refresh dropdown setelah tambah kategori/brand baru**
+- **Daftar produk dengan**:
+  - **Kolom kategori dan brand dalam tabel produk**
+  - **Kolom jenis produk (Satuan/Paket/Bundle) dengan badge visual**
+  - **Kolom stok dengan indikator khusus untuk produk paket dan bundle yang terupdate real-time**
+  - **Tooltip atau expandable row untuk melihat komponen produk paket dan bundle**
+  - **Filter berdasarkan kategori, brand, dan jenis produk**
+  - **Pencarian yang mencakup nama produk, kategori, dan brand**
+  - **Auto-refresh stok paket dan bundle saat ada perubahan stok komponen**
+- **Halaman Manajemen Stok dengan**:
+  - **Tabel produk, paket, dan bundle dengan kolom stok saat ini yang terupdate secara real-time**
+  - **Indikator visual berbeda untuk stok produk satuan vs paket vs bundle**
+  - **Tooltip untuk produk paket dan bundle menunjukkan komponen yang membatasi stok**
+  - **Tombol aksi stok (Tambah/Kurangi/Pindahkan) hanya untuk produk satuan**
+  - **Modal input dengan validasi untuk operasi stok**
+  - **Select outlet tujuan untuk transfer stok**
+  - **React Query mutation untuk operasi stok**
+  - **Auto-refresh tabel setelah operasi berhasil dengan update stok paket dan bundle yang akurat dan real-time**
+  - **Notifikasi toast untuk feedback operasi**
+  - **Live update stok paket dan bundle saat stok komponen berubah tanpa perlu refresh manual**
+- **Halaman POSPage dengan**:
+  - **Sistem tab Offline, Online, dan Food Delivery untuk pemilihan metode pembayaran**
+  - **Tab Offline**: Tunai, Kartu Debit/Kredit, Transfer Bank
+  - **Tab Online**: eWallet (gabungan semua e-wallet), QRIS
+  - **Tab Food Delivery**: ShopeeFood, GoFood, GrabFood, MaximFood, TikTok
+  - **Interface Split Payment dengan kemampuan menambah beberapa metode pembayaran**
+  - **Input jumlah untuk setiap metode pembayaran yang dipilih**
+  - **Validasi total pembayaran harus sama dengan total belanja**
+  - **Ringkasan semua metode pembayaran sebelum konfirmasi**
+  - **Validasi pemilihan metode pembayaran sebelum checkout**
+  - **Konfirmasi transaksi dengan detail semua metode pembayaran**
+  - **Daftar produk dengan indikator jenis (Satuan/Paket/Bundle)**
+  - **Validasi stok tersedia untuk produk paket dan bundle sebelum menambah ke keranjang dengan perhitungan yang akurat**
+  - **Tooltip atau info komponen untuk produk paket dan bundle**
+  - **Update real-time level stok setelah transaksi paket dan bundle berhasil**
+- **Halaman ReportsPage dengan**:
+  - **Filter kategori pembayaran (Offline/Online/Food Delivery)**
+  - **Filter sub-kategori (eWallet, QRIS untuk Online; ShopeeFood, GoFood, GrabFood, MaximFood, TikTok untuk Food Delivery)**
+  - **Filter kategori dan brand produk**
+  - **Filter jenis produk (Satuan/Paket/Bundle/Semua)**
+  - **Tabel laporan dengan kolom kategori dan sub-kategori pembayaran**
+  - **Tabel laporan dengan kolom kategori dan brand produk**
+  - **Detail split payment dalam laporan transaksi**
+  - **Grafik pendapatan per kategori pembayaran untuk owner**
+  - **Grafik penjualan per kategori dan brand produk**
+  - **Statistik distribusi penjualan berdasarkan kategori Offline/Online/Food Delivery**
+  - **Breakdown detail sub-kategori dalam laporan**
+  - **Laporan inventori dengan analisis stok produk paket dan bundle**
+  - **Grafik perbandingan penjualan produk satuan vs paket vs bundle**
+- **MainLayout dengan navigasi dinamis**:
+  - **Load konfigurasi akses menu saat aplikasi dimuat**
+  - **Filter menu berdasarkan role pengguna dan konfigurasi owner**
+  - **Update navigasi secara real-time saat konfigurasi berubah**
+  - **Validasi akses halaman berdasarkan konfigurasi**
+  - **Redirect ke halaman yang diizinkan jika akses ditolak**
+  - **Indikator visual untuk menu yang dinonaktifkan**
+- **Semua teks dalam bahasa Indonesia**
