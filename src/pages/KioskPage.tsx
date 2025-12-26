@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useGetCallerUserProfile, useListOutlets, useListProductsByOutlet, useListActivePackages, useListActiveBundles, useCreateTransaction, useGetUserTransactionHistory, useGetPaymentSettings, useUploadPaymentProof } from '../hooks/useQueries';
-import { useInternetIdentity } from '../hooks/useInternetIdentity';
+import { useInternetIdentity } from '../hooks/useAuth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';

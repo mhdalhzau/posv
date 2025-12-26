@@ -1,34 +1,34 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
-// IMPORT SEMUA DARI SATU FILE AGAR TIDAK ERROR
+// --- IMPORTS: TYPES ---
 import { 
-  AppRole as UserRole, // Alias
+  AppRole as UserRole, // Alias agar konsisten
   type UserProfile, 
-  type ProductRequest, 
+  type ProductRequest, // Jika diperlukan nanti
   type MenuAccessConfig, 
   type MenuAccessInput, 
   type MenuAccess,
   type Product, 
   type Category, 
   type Brand, 
-  type ProductPackage, 
-  type PackageComponent, 
-  type Bundle, 
-  type BundleItem,
+  // type ProductPackage, 
+  // type PackageComponent, 
+  // type Bundle, 
+  // type BundleItem,
   type Transaction,
   type TransactionItem,
   type PaymentMethod,
   type Outlet,
-  type StockLog,
-  type DailySummary,
-  type GuestCustomerData
+  // type StockLog,
+  // type DailySummary,
+  // type GuestCustomerData
 } from '../backend'; 
 
-// Konfigurasi URL API WordPress
+// --- KONFIGURASI API ---
 const WP_API_URL = import.meta.env.VITE_WP_API_URL || 'https://erpos.tekrabyte.id/wp-json/posq/v1';
 
-// --- Helper: Fetcher dengan Auth Token ---
+// --- HELPER: Fetcher dengan Auth Token ---
 async function fetchAPI<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('posq_token');
   
@@ -51,10 +51,15 @@ async function fetchAPI<T>(endpoint: string, options: RequestInit = {}): Promise
     throw new Error(errorData.message || `API Error: ${response.statusText}`);
   }
 
+  // Handle empty responses (like 204 No Content)
+  if (response.status === 204) return {} as T;
+
   return response.json();
 }
 
-// --- User Profile Queries ---
+// ==========================================
+// 1. USER PROFILE & AUTH
+// ==========================================
 
 export function useGetCallerUserProfile() {
   return useQuery<UserProfile | null>({
@@ -78,10 +83,17 @@ export function useGetCallerUserProfile() {
 export function useSaveCallerUserProfile() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (profile: UserProfile) => fetchAPI('/profile', {
-      method: 'POST',
-      body: JSON.stringify(profile),
-    }),
+    mutationFn: (profile: UserProfile) => {
+      // Pastikan BigInt dikonversi ke string/number sebelum dikirim
+      const payload = {
+        ...profile,
+        outletId: profile.outletId ? Number(profile.outletId) : null
+      };
+      return fetchAPI('/profile', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['currentUserProfile'] });
       toast.success('Profil berhasil disimpan');
@@ -114,7 +126,9 @@ export function useGetCallerUserRole() {
   });
 }
 
-// --- Staff Management ---
+// ==========================================
+// 2. STAFF MANAGEMENT
+// ==========================================
 
 export function useListAllUsers() {
   return useQuery<Array<[string, UserProfile]>>({
@@ -136,15 +150,21 @@ export function useListAllUsers() {
 export function useUpdateUserProfile() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ userId, profile }: { userId: string; profile: UserProfile }) => 
-      fetchAPI(`/users/${userId}`, {
+    mutationFn: ({ userId, profile }: { userId: string; profile: UserProfile }) => {
+      const payload = {
+        ...profile,
+        outletId: profile.outletId ? Number(profile.outletId) : null
+      };
+      return fetchAPI(`/users/${userId}`, {
         method: 'PUT',
-        body: JSON.stringify(profile),
-      }),
+        body: JSON.stringify(payload),
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['allUsers'] });
       toast.success('User updated');
     },
+    onError: (e: Error) => toast.error(e.message),
   });
 }
 
@@ -165,7 +185,9 @@ export function useAssignCallerUserRole() {
   });
 }
 
-// --- Menu Access ---
+// ==========================================
+// 3. MENU ACCESS CONTROL
+// ==========================================
 
 export function useGetMenuAccessConfig() {
   return useQuery<MenuAccessConfig>({
@@ -209,7 +231,9 @@ export function useIsMenuAccessible(menu: string) {
   });
 }
 
-// --- Outlets ---
+// ==========================================
+// 4. OUTLETS
+// ==========================================
 
 export function useListOutlets() {
   return useQuery<Outlet[]>({
@@ -274,7 +298,9 @@ export function useUpdateOutlet() {
   });
 }
 
-// --- Products, Categories, Brands ---
+// ==========================================
+// 5. MASTER DATA (CATEGORIES & BRANDS)
+// ==========================================
 
 export function useGetAllCategories() {
   return useQuery<Category[]>({
@@ -307,12 +333,15 @@ export function useCreateCategory() {
 }
 
 export function useUpdateCategory() {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: (data: { id: bigint; name: string; description: string; isActive: boolean }) =>
-            fetchAPI(`/categories/${data.id}`, { method: 'PUT', body: JSON.stringify({ ...data, id: Number(data.id) }) }),
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['categories'] })
-    });
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { id: bigint; name: string; description: string; isActive: boolean }) =>
+      fetchAPI(`/categories/${data.id}`, { 
+        method: 'PUT', 
+        body: JSON.stringify({ ...data, id: Number(data.id) }) 
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['categories'] })
+  });
 }
 
 export function useGetAllBrands() {
@@ -345,12 +374,17 @@ export function useCreateBrand() {
   });
 }
 
+// Placeholder for missing brand hooks
 export function useUpdateBrand() {
-    return useMutation({ mutationFn: async () => {} }); 
+  return useMutation({ mutationFn: async () => {} }); 
 }
 export function useDeleteBrand() {
-    return useMutation({ mutationFn: async () => {} }); 
+  return useMutation({ mutationFn: async () => {} }); 
 }
+
+// ==========================================
+// 6. PRODUCTS
+// ==========================================
 
 export function useListProductsByOutlet(outletId: bigint | null) {
   return useQuery<Product[]>({
@@ -454,7 +488,9 @@ export function useDeleteProduct() {
   });
 }
 
-// --- Transactions ---
+// ==========================================
+// 7. TRANSACTIONS
+// ==========================================
 
 export function useCreateTransaction() {
   const queryClient = useQueryClient();
@@ -479,7 +515,7 @@ export function useCreateTransaction() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
-      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] }); // Stock changes
       toast.success('Transaction saved');
     },
     onError: (e: Error) => toast.error(e.message),
@@ -498,70 +534,55 @@ export function useListTransactions(outletId: bigint) {
         total: BigInt(t.total),
         timestamp: BigInt(new Date(t.created_at).getTime()),
         status: t.status,
-        items: [],
+        items: [], // Detail items usually fetched separately or need eager load API
         paymentMethods: []
       }));
     },
   });
 }
 
-// --- Missing Hooks Fixes ---
-
-export function useGetUserTransactionHistory(userId?: string) { // Made optional
-    return useQuery<Transaction[]>({
-        queryKey: ['userTrxHistory', userId],
-        queryFn: async () => {
-            if (!userId) return [];
-            try {
-                const data = await fetchAPI<any[]>(`/transactions/user/${userId}`);
-                return data.map(t => ({
-                    id: BigInt(t.id),
-                    userId: t.user_id.toString(),
-                    outletId: BigInt(t.outlet_id),
-                    total: BigInt(t.total),
-                    timestamp: BigInt(new Date(t.created_at).getTime()),
-                    status: t.status,
-                    items: [],
-                    paymentMethods: []
-                }));
-            } catch (e) {
-                return [];
-            }
-        },
-        enabled: !!userId
-    });
-}
-
-export function useGetPaymentSettings() {
-    return useQuery<any>({
-        queryKey: ['paymentSettings'],
-        queryFn: async () => {
-            return {
-                enable_cash: true,
-                enable_qris: true,
-                enable_transfer: true
-            };
-        }
-    });
-}
-
-export function useUploadPaymentProof() {
-    return useMutation({
-        mutationFn: async (file: File) => {
-            return new Promise(resolve => setTimeout(resolve, 1000));
-        },
-        onSuccess: () => toast.success('Bukti pembayaran diunggah'),
-    });
-}
-
-// Fix untuk CustomerManagementPage
-export function useGetAllCustomers() {
-  return useQuery<Array<[string, UserProfile]>>({
-    queryKey: ['allCustomers'],
+export function useGetUserTransactionHistory(userId?: string) {
+  return useQuery<Transaction[]>({
+    queryKey: ['userTrxHistory', userId],
     queryFn: async () => {
-      // Placeholder data
-      return []; 
+      if (!userId) return [];
+      try {
+        const data = await fetchAPI<any[]>(`/transactions/user/${userId}`);
+        return data.map(t => ({
+          id: BigInt(t.id),
+          userId: t.user_id.toString(),
+          outletId: BigInt(t.outlet_id),
+          total: BigInt(t.total),
+          timestamp: BigInt(new Date(t.created_at).getTime()),
+          status: t.status,
+          items: [],
+          paymentMethods: []
+        }));
+      } catch (e) {
+        return [];
+      }
     },
+    enabled: !!userId
+  });
+}
+
+export function useListAllTransactions(outletId?: bigint) {
+  return useQuery<Transaction[]>({
+    queryKey: ['allTrx', outletId?.toString()],
+    queryFn: async () => {
+      const query = outletId ? `?outlet_id=${outletId}` : '';
+      const data = await fetchAPI<any[]>(`/transactions/all${query}`);
+      return data.map(t => ({
+        id: BigInt(t.id),
+        userId: t.user_id?.toString() || 'Guest',
+        outletId: BigInt(t.outlet_id),
+        total: BigInt(t.total),
+        timestamp: BigInt(new Date(t.created_at).getTime()),
+        status: t.status || 'completed',
+        items: t.items || [],
+        paymentMethods: t.payment_methods || []
+      }));
+    }
   });
 }
 
@@ -581,65 +602,87 @@ export function useUpdateTransactionStatus() {
   });
 }
 
-export function useListAllTransactions(outletId?: bigint) {
-    return useQuery<Transaction[]>({
-        queryKey: ['allTrx', outletId?.toString()],
-        queryFn: async () => {
-            const query = outletId ? `?outlet_id=${outletId}` : '';
-            const data = await fetchAPI<any[]>(`/transactions/all${query}`);
-            return data.map(t => ({
-                id: BigInt(t.id),
-                userId: t.user_id?.toString() || 'Guest',
-                outletId: BigInt(t.outlet_id),
-                total: BigInt(t.total),
-                timestamp: BigInt(new Date(t.created_at).getTime()),
-                status: t.status || 'completed',
-                items: t.items || [],
-                paymentMethods: t.payment_methods || []
-            }));
-        }
-    });
+// ==========================================
+// 8. PAYMENT & CUSTOMERS
+// ==========================================
+
+export function useGetPaymentSettings() {
+  return useQuery<any>({
+    queryKey: ['paymentSettings'],
+    queryFn: async () => {
+      // Fetch from API or return static config
+      return {
+        enable_cash: true,
+        enable_qris: true,
+        enable_transfer: true
+      };
+    }
+  });
 }
 
-// --- Stock & Placeholders ---
+export function useUploadPaymentProof() {
+  return useMutation({
+    mutationFn: async (file: File) => {
+      // Implement file upload logic here (FormData)
+      return new Promise(resolve => setTimeout(resolve, 1000));
+    },
+    onSuccess: () => toast.success('Bukti pembayaran diunggah'),
+  });
+}
+
+export function useGetAllCustomers() {
+  return useQuery<Array<[string, UserProfile]>>({
+    queryKey: ['allCustomers'],
+    queryFn: async () => {
+      return []; // Placeholder
+    },
+  });
+}
+
+// ==========================================
+// 9. STOCK MANAGEMENT
+// ==========================================
 
 export function useAddStock() {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: (data: { productId: bigint; quantity: bigint }) => fetchAPI('/stock/update', {
-            method: 'POST',
-            body: JSON.stringify({ 
-                product_id: Number(data.productId), 
-                quantity: Number(data.quantity), 
-                operation: 'add' 
-            }),
-        }),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['products'] });
-            toast.success('Stock added');
-        },
-    });
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { productId: bigint; quantity: bigint }) => fetchAPI('/stock/update', {
+      method: 'POST',
+      body: JSON.stringify({ 
+        product_id: Number(data.productId), 
+        quantity: Number(data.quantity), 
+        operation: 'add' 
+      }),
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      toast.success('Stock added');
+    },
+  });
 }
 
 export function useReduceStock() {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: (data: { productId: bigint; quantity: bigint }) => fetchAPI('/stock/update', {
-            method: 'POST',
-            body: JSON.stringify({ 
-                product_id: Number(data.productId), 
-                quantity: Number(data.quantity), 
-                operation: 'reduce' 
-            }),
-        }),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['products'] });
-            toast.success('Stock reduced');
-        },
-    });
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { productId: bigint; quantity: bigint }) => fetchAPI('/stock/update', {
+      method: 'POST',
+      body: JSON.stringify({ 
+        product_id: Number(data.productId), 
+        quantity: Number(data.quantity), 
+        operation: 'reduce' 
+      }),
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      toast.success('Stock reduced');
+    },
+  });
 }
 
-// --- Dummy Placeholders ---
+// ==========================================
+// 10. PLACEHOLDERS & FUTURE FEATURES
+// ==========================================
+
 const notImplemented = () => Promise.resolve([]);
 const dummyMutation = () => ({ mutate: () => toast.info('Fitur belum tersedia'), isPending: false });
 
@@ -660,7 +703,10 @@ export const useGetStockLogs = (id: any) => useQuery({ queryKey: ['logs'], query
 
 export const useListMyTransactions = () => useQuery({ queryKey: ['myTrx'], queryFn: notImplemented });
 
-export const useGetDailySummaryOutlet = (id: any) => useQuery({ queryKey: ['daily'], queryFn: () => ({ totalRevenue: 0n, transactionCount: 0n, date: 0n }) });
+export const useGetDailySummaryOutlet = (id: any) => useQuery({ 
+  queryKey: ['daily'], 
+  queryFn: () => ({ totalRevenue: 0n, transactionCount: 0n, date: 0n }) 
+});
 export const useGetOverallSummaryOutlet = (id: any) => useQuery({ queryKey: ['ovr'], queryFn: () => [0n, 0n] });
 export const useGetBestSellers = (id: any) => useQuery({ queryKey: ['best'], queryFn: notImplemented });
 export const useGetTopOutlets = () => useQuery({ queryKey: ['top'], queryFn: notImplemented });
@@ -670,5 +716,6 @@ export const useGetTotalRevenuePerPaymentCategory = () => useQuery({ queryKey: [
 export const useGetRevenueByPaymentCategory = () => useQuery({ queryKey: ['revPay'], queryFn: () => 0n });
 export const useGetRevenueByPaymentSubCategory = () => useQuery({ queryKey: ['revSub'], queryFn: () => 0n });
 export const useGetTransactionsByPaymentCategory = () => useQuery({ queryKey: ['trxCat'], queryFn: notImplemented });
+
 export const useGetCategory = (id: any) => useQuery({ queryKey: ['cat', id], queryFn: () => null });
 export const useGetBrand = (id: any) => useQuery({ queryKey: ['brand', id], queryFn: () => null });

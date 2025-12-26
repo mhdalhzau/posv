@@ -1,5 +1,4 @@
-import { useInternetIdentity } from '../hooks/useInternetIdentity';
-import { useGetCallerUserProfile, useIsCallerAdmin, useGetRoleMenuAccess } from '../hooks/useQueries';
+import { useAuth } from '../hooks/useAuth';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import {
@@ -26,6 +25,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { AppRole } from '../backend';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -34,25 +34,52 @@ interface MainLayoutProps {
 }
 
 export default function MainLayout({ children, currentPage, onNavigate }: MainLayoutProps) {
-  const { clear } = useInternetIdentity();
+  // Ganti hook lama dengan useAuth
+  const { user, logout } = useAuth();
   const queryClient = useQueryClient();
-  const { data: userProfile } = useGetCallerUserProfile();
-  const { data: isAdmin } = useIsCallerAdmin();
-  const { data: menuAccess, isLoading: menuAccessLoading } = useGetRoleMenuAccess();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const isOwner = isAdmin;
+  // Tentukan apakah user adalah owner
+  const isOwner = user?.role === AppRole.owner;
 
   const handleLogout = async () => {
-    await clear();
+    logout();
     queryClient.clear();
   };
 
+  // Konfigurasi akses menu berdasarkan Role (Pengganti useGetRoleMenuAccess)
+  const getAccessibleMenus = (role?: AppRole): string[] => {
+    if (!role) return [];
+
+    const allMenus = [
+      'dashboard', 
+      'pos', 
+      'products', 
+      'stock', 
+      'categories', 
+      'reports', 
+      'outlets', 
+      'staff', 
+      'settings'
+    ];
+
+    switch (role) {
+      case AppRole.owner:
+      case AppRole.manager:
+        return allMenus; // Akses penuh
+      case AppRole.cashier:
+        // Kasir hanya akses POS, Produk, Stok, Kategori (contoh)
+        return ['dashboard', 'pos', 'products', 'stock', 'categories'];
+      default:
+        return [];
+    }
+  };
+
+  const allowedMenus = getAccessibleMenus(user?.role);
+
   // Helper function to check if a menu is accessible
   const isMenuAccessible = (menuKey: string): boolean => {
-    if (menuAccessLoading || !menuAccess) return false;
-    const menuItem = menuAccess.find(m => m.menu === menuKey);
-    return menuItem ? menuItem.isAccessible : false;
+    return allowedMenus.includes(menuKey);
   };
 
   // Define all possible navigation items
@@ -73,13 +100,13 @@ export default function MainLayout({ children, currentPage, onNavigate }: MainLa
 
   // Redirect to first accessible page if current page is not accessible
   useEffect(() => {
-    if (!menuAccessLoading && menuAccess && navigation.length > 0) {
+    if (user && navigation.length > 0) {
       const currentPageAccessible = navigation.some(item => item.page === currentPage);
       if (!currentPageAccessible) {
         onNavigate(navigation[0].page);
       }
     }
-  }, [menuAccess, menuAccessLoading, currentPage, navigation, onNavigate]);
+  }, [user, currentPage, navigation, onNavigate]);
 
   const NavLinks = ({ mobile = false }: { mobile?: boolean }) => (
     <>
@@ -136,15 +163,15 @@ export default function MainLayout({ children, currentPage, onNavigate }: MainLa
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="gap-2">
                 <User className="h-5 w-5" />
-                <span className="hidden sm:inline">{userProfile?.name || 'User'}</span>
+                <span className="hidden sm:inline">{user?.name || 'User'}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel>
                 <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium">{userProfile?.name}</p>
+                  <p className="text-sm font-medium">{user?.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {isOwner ? 'Owner' : userProfile?.role === 'manager' ? 'Manager' : userProfile?.role === 'cashier' ? 'Kasir' : 'Guest'}
+                    {user?.role === AppRole.owner ? 'Owner' : user?.role === AppRole.manager ? 'Manager' : 'Kasir'}
                   </p>
                 </div>
               </DropdownMenuLabel>
@@ -176,8 +203,8 @@ export default function MainLayout({ children, currentPage, onNavigate }: MainLa
       <footer className="border-t py-6">
         <div className="container text-center text-sm text-muted-foreground">
           © 2025. Dibuat dengan ❤️ menggunakan{' '}
-          <a href="https://caffeine.ai" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-            caffeine.ai
+          <a href="#" className="text-primary hover:underline">
+            KasirKu System
           </a>
         </div>
       </footer>

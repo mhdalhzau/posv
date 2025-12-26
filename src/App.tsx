@@ -1,11 +1,12 @@
+// src/App.tsx
 import { useState } from 'react';
-import { useInternetIdentity } from './hooks/useInternetIdentity';
-import { useGetCallerUserProfile } from './hooks/useQueries';
+import { AuthProvider, useAuth } from './hooks/useAuth'; // Import Auth baru
+// Hapus import useInternetIdentity dan useGetCallerUserProfile jika tidak dipakai lagi untuk auth awal
 import { ThemeProvider } from 'next-themes';
 import { Toaster } from '@/components/ui/sonner';
 import LoginPage from './pages/LoginPage';
-import ProfileSetupModal from './components/ProfileSetupModal';
 import MainLayout from './components/MainLayout';
+// ... import halaman lainnya tetap sama
 import DashboardPage from './pages/DashboardPage';
 import ProductManagementPage from './pages/ProductManagementPage';
 import POSPage from './pages/POSPage';
@@ -15,72 +16,48 @@ import StaffManagementPage from './pages/StaffManagementPage';
 import StockManagementPage from './pages/StockManagementPage';
 import CategoryBrandPage from './pages/CategoryBrandPage';
 import SettingsPage from './pages/SettingsPage';
+// ProfileSetupModal mungkin tidak diperlukan lagi jika data user langsung didapat dari login database backend standar, 
+// tapi jika masih butuh, logika bisa disesuaikan.
 
-export default function App() {
-  const { identity, isInitializing } = useInternetIdentity();
-  const { data: userProfile, isLoading: profileLoading, isFetched } = useGetCallerUserProfile();
+// Komponen Wrapper untuk menangani logika Auth di dalam Provider
+const AppContent = () => {
+  const { user, isAuthenticated } = useAuth();
   const [currentPage, setCurrentPage] = useState<string>('dashboard');
 
-  const isAuthenticated = !!identity;
-
-  // Show loading state while initializing
-  if (isInitializing) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <div className="text-center">
-          <div className="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto"></div>
-          <p className="text-muted-foreground">Memuat...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Show login page if not authenticated
+  // Jika belum login, tampilkan Login Page
   if (!isAuthenticated) {
-    return (
-      <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
-        <LoginPage />
-        <Toaster />
-      </ThemeProvider>
-    );
+    return <LoginPage />;
   }
 
-  // Show profile setup modal if user doesn't have a profile yet
-  const showProfileSetup = isAuthenticated && !profileLoading && isFetched && userProfile === null;
-
+  // Router sederhana
   const renderPage = () => {
     switch (currentPage) {
-      case 'dashboard':
-        return <DashboardPage />;
-      case 'products':
-        return <ProductManagementPage />;
-      case 'pos':
-        return <POSPage />;
-      case 'reports':
-        return <ReportsPage />;
-      case 'outlets':
-        return <OutletsPage />;
-      case 'staff':
-        return <StaffManagementPage />;
-      case 'stock':
-        return <StockManagementPage />;
-      case 'categories-brands':
-        return <CategoryBrandPage />;
-      case 'settings':
-        return <SettingsPage />;
-      default:
-        return <DashboardPage />;
+      case 'dashboard': return <DashboardPage />;
+      case 'products': return <ProductManagementPage />;
+      case 'pos': return <POSPage />;
+      case 'reports': return <ReportsPage />;
+      case 'outlets': return <OutletsPage />;
+      case 'staff': return <StaffManagementPage />;
+      case 'stock': return <StockManagementPage />;
+      case 'categories-brands': return <CategoryBrandPage />;
+      case 'settings': return <SettingsPage />;
+      default: return <DashboardPage />;
     }
   };
 
   return (
+    <MainLayout currentPage={currentPage} onNavigate={setCurrentPage}>
+      {renderPage()}
+    </MainLayout>
+  );
+};
+
+export default function App() {
+  return (
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
-      {showProfileSetup && <ProfileSetupModal />}
-      {!showProfileSetup && (
-        <MainLayout currentPage={currentPage} onNavigate={setCurrentPage}>
-          {renderPage()}
-        </MainLayout>
-      )}
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
       <Toaster />
     </ThemeProvider>
   );
