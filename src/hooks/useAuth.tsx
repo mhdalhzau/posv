@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { UserProfile } from '../backend'; // Pastikan import ini benar
 
 // Ganti URL ini dengan URL website WordPress kamu yang asli
-const WP_API_URL = import.meta.env.VITE_WP_API_URL || 'http://localhost:3000/wp-json/posq/v1';
+const WP_API_URL = import.meta.env.VITE_WP_API_URL || 'https://erpos.tekrabyte.id/wp-json/posq/v1';
 
 // --- Fetcher Helper ---
 async function fetchAPI<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
