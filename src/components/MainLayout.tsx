@@ -1,4 +1,5 @@
-import { useCurrentUser, useLogout } from '../hooks/useAuth'; // UBAH IMPORT INI
+import { useCurrentUser, useLogout } from '../hooks/useAuth';
+import { useIsCallerAdmin, useGetRoleMenuAccess } from '../hooks/useQueries';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import {
@@ -25,7 +26,6 @@ import {
   Settings,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { AppRole } from '../backend';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -34,52 +34,33 @@ interface MainLayoutProps {
 }
 
 export default function MainLayout({ children, currentPage, onNavigate }: MainLayoutProps) {
-  // --- PERBAIKAN: Ganti useAuth() dengan hook React Query ---
-  const { data: user } = useCurrentUser(); 
-  const logout = useLogout();
-  // ---------------------------------------------------------
-
   const queryClient = useQueryClient();
+  const { data: userProfile } = useCurrentUser();
+  const { data: isAdmin } = useIsCallerAdmin();
+  const { data: menuAccess, isLoading: menuAccessLoading } = useGetRoleMenuAccess();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  
+  // Get logout function
+  const logout = useLogout();
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     logout();
     queryClient.clear();
   };
 
-  // Konfigurasi akses menu berdasarkan Role
-  const getAccessibleMenus = (role?: AppRole): string[] => {
-    if (!role) return [];
-
-    const allMenus = [
-      'dashboard', 
-      'pos', 
-      'products', 
-      'stock', 
-      'categories', 
-      'reports', 
-      'outlets', 
-      'staff', 
-      'settings'
-    ];
-
-    switch (role) {
-      case AppRole.owner:
-      case AppRole.manager:
-        return allMenus;
-      case AppRole.cashier:
-        return ['dashboard', 'pos', 'products', 'stock', 'categories'];
-      default:
-        return [];
-    }
-  };
-
-  const allowedMenus = getAccessibleMenus(user?.role);
-
+  // Helper function to check if a menu is accessible
   const isMenuAccessible = (menuKey: string): boolean => {
-    return allowedMenus.includes(menuKey);
+    if (menuAccessLoading || !menuAccess) return false;
+    // Jika menuAccess adalah array, cari item dengan key yang sesuai
+    if (Array.isArray(menuAccess)) {
+      const menuItem = menuAccess.find((m: any) => m.menu === menuKey || m.key === menuKey);
+      return menuItem ? menuItem.isAccessible || menuItem.isAccessible : false;
+    }
+    // Jika menuAccess adalah object, cek properti langsung
+    return menuAccess[menuKey] === true || menuAccess[menuKey] === 'accessible';
   };
 
+  // Define all possible navigation items
   const allNavigationItems = [
     { name: 'Dashboard', page: 'dashboard', icon: LayoutDashboard, menuKey: 'dashboard' },
     { name: 'Kasir (POS)', page: 'pos', icon: ShoppingCart, menuKey: 'pos' },
@@ -92,22 +73,27 @@ export default function MainLayout({ children, currentPage, onNavigate }: MainLa
     { name: 'Pengaturan', page: 'settings', icon: Settings, menuKey: 'settings' },
   ];
 
+  // Filter navigation based on menu access configuration
   const navigation = allNavigationItems.filter(item => isMenuAccessible(item.menuKey));
 
-  // Redirect jika halaman tidak bisa diakses
+  // Fallback navigation jika tidak ada yang bisa diakses
+  const effectiveNavigation = navigation.length > 0 ? navigation : [
+    { name: 'Dashboard', page: 'dashboard', icon: LayoutDashboard, menuKey: 'dashboard' }
+  ];
+
+  // Redirect to first accessible page if current page is not accessible
   useEffect(() => {
-    if (user && navigation.length > 0) {
-      const currentPageAccessible = navigation.some(item => item.page === currentPage);
-      // Cek agar tidak redirect loop jika sedang di halaman valid
-      if (!currentPageAccessible && currentPage !== 'login') {
-        onNavigate(navigation[0].page);
+    if (!menuAccessLoading && effectiveNavigation.length > 0) {
+      const currentPageAccessible = effectiveNavigation.some(item => item.page === currentPage);
+      if (!currentPageAccessible) {
+        onNavigate(effectiveNavigation[0].page);
       }
     }
-  }, [user, currentPage, navigation, onNavigate]);
+  }, [menuAccessLoading, currentPage, effectiveNavigation, onNavigate]);
 
   const NavLinks = ({ mobile = false }: { mobile?: boolean }) => (
     <>
-      {navigation.map((item) => {
+      {effectiveNavigation.map((item) => {
         const Icon = item.icon;
         const isActive = currentPage === item.page;
         return (
@@ -128,6 +114,23 @@ export default function MainLayout({ children, currentPage, onNavigate }: MainLa
       })}
     </>
   );
+
+  // Get user display info
+  const getUserDisplayInfo = () => {
+    if (!userProfile) return { name: 'User', role: 'Guest' };
+    
+    const name = userProfile.name || userProfile.username || 'User';
+    let role = userProfile.role || 'Guest';
+    
+    // Translate role to Indonesian
+    if (isAdmin) role = 'Owner';
+    else if (role === 'manager') role = 'Manager';
+    else if (role === 'cashier') role = 'Kasir';
+    
+    return { name, role };
+  };
+
+  const { name: displayName, role: displayRole } = getUserDisplayInfo();
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -150,7 +153,10 @@ export default function MainLayout({ children, currentPage, onNavigate }: MainLa
                 </nav>
               </SheetContent>
             </Sheet>
-            <button onClick={() => onNavigate('dashboard')} className="flex items-center gap-2">
+            <button 
+              onClick={() => onNavigate('dashboard')} 
+              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+            >
               <ShoppingCart className="h-6 w-6 text-primary" />
               <span className="text-xl font-bold">POS System</span>
             </button>
@@ -158,22 +164,22 @@ export default function MainLayout({ children, currentPage, onNavigate }: MainLa
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="gap-2">
+              <Button variant="ghost" className="gap-2 hover:bg-accent">
                 <User className="h-5 w-5" />
-                <span className="hidden sm:inline">{user?.name || 'User'}</span>
+                <span className="hidden sm:inline">{displayName}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel>
                 <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium">{user?.name}</p>
+                  <p className="text-sm font-medium">{displayName}</p>
                   <p className="text-xs text-muted-foreground">
-                    {user?.role === AppRole.owner ? 'Owner' : user?.role === AppRole.manager ? 'Manager' : 'Kasir'}
+                    {displayRole}
                   </p>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleLogout} className="text-destructive">
+              <DropdownMenuItem onClick={handleLogout} className="text-destructive cursor-pointer">
                 <LogOut className="mr-2 h-4 w-4" />
                 Logout
               </DropdownMenuItem>
@@ -191,7 +197,7 @@ export default function MainLayout({ children, currentPage, onNavigate }: MainLa
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1">
+        <main className="flex-1 overflow-auto">
           <div className="container py-6">{children}</div>
         </main>
       </div>
@@ -200,8 +206,13 @@ export default function MainLayout({ children, currentPage, onNavigate }: MainLa
       <footer className="border-t py-6">
         <div className="container text-center text-sm text-muted-foreground">
           © 2025. Dibuat dengan ❤️ menggunakan{' '}
-          <a href="#" className="text-primary hover:underline">
-            KasirKu System
+          <a 
+            href="https://caffeine.ai" 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            className="text-primary hover:underline font-medium"
+          >
+            caffeine.ai
           </a>
         </div>
       </footer>
