@@ -1,47 +1,60 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { UserProfile } from '../backend'; // Pastikan import ini benar
+import { UserProfile } from '../backend';
 
-// Ganti URL ini dengan URL website WordPress kamu yang asli
-const WP_API_URL = import.meta.env.VITE_WP_API_URL || 'https://erpos.tekrabyte.id/wp-json/posq/v1';
+const WP_API_URL =
+  import.meta.env.VITE_WP_API_URL ||
+  'https://erpos.tekrabyte.id/wp-json/posq/v1';
 
-// --- Fetcher Helper ---
-async function fetchAPI<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+/* ======================================================
+ * FETCH HELPER
+ * ==================================================== */
+async function fetchAPI<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<T> {
   const token = localStorage.getItem('posq_token');
-  
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...options.headers as Record<string, string>,
+    ...(options.headers as Record<string, string>),
   };
 
+  // ✅ TOKEN DIKIRIM VIA CUSTOM HEADER
   if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-    headers['X-Posq-Token'] = token; // [BARU] Kirim token di header cadangan juga
+   headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${WP_API_URL}${endpoint}`, { ...options, headers });
+  const response = await fetch(`${WP_API_URL}${endpoint}`, {
+    ...options,
+    headers,
+  });
 
-  // Handle Logout jika token tidak valid (401 atau 403 dari endpoint profile)
-  if (response.status === 401 || (response.status === 403 && endpoint === '/profile')) {
+  // ⛔ Token invalid / expired
+  if (response.status === 401) {
     localStorage.removeItem('posq_token');
-    throw new Error('Sesi berakhir, silakan login lagi');
+    throw new Error('Sesi berakhir, silakan login kembali');
   }
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || 'Terjadi kesalahan pada server');
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message || 'Terjadi kesalahan server');
   }
 
   return response.json();
 }
 
-// --- 1. Hook Cek User (Profile) ---
+/* ======================================================
+ * 1. CURRENT USER (PROFILE)
+ * ==================================================== */
 export function useCurrentUser() {
   return useQuery<UserProfile | null>({
     queryKey: ['currentUser'],
+    retry: false,
     queryFn: async () => {
       const token = localStorage.getItem('posq_token');
-      if (!token) return null; // Jika tidak ada token, jangan fetch ke server
+      if (!token) return null;
+
       try {
         const data = await fetchAPI<any>('/profile');
         return {
@@ -49,57 +62,62 @@ export function useCurrentUser() {
           role: data.role,
           outletId: data.outlet_id ? BigInt(data.outlet_id) : null,
         };
-      } catch (error) {
-        return null; // Token tidak valid/expired
+      } catch {
+        return null;
       }
     },
-    retry: false,
   });
 }
 
-// --- 2. Hook Login ---
+/* ======================================================
+ * 2. LOGIN
+ * ==================================================== */
 export function useLogin() {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
-    mutationFn: async ({ username, password }: any) => {
-      // Endpoint ini harus cocok dengan yang ada di posq-backend.php
+    mutationFn: async ({
+      username,
+      password,
+    }: {
+      username: string;
+      password: string;
+    }) => {
       const res = await fetch(`${WP_API_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }), // ✅ Password dikirim di sini
+        body: JSON.stringify({ username, password }),
       });
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || 'Login gagal, cek username/password');
+        throw new Error(err.message || 'Login gagal');
       }
+
       return res.json();
     },
+
     onSuccess: (data) => {
-      // Simpan token dari response backend
       localStorage.setItem('posq_token', data.token);
-      
-      // Refresh data user agar aplikasi sadar kita sudah login
       queryClient.invalidateQueries({ queryKey: ['currentUser'] });
-      
-      toast.success('Berhasil masuk!');
-      // Redirect akan ditangani otomatis oleh App.tsx saat user terdeteksi ada
+      toast.success('Berhasil masuk');
     },
-    onError: (error: Error) => {
-      toast.error(error.message);
-    }
+
+    onError: (err: Error) => {
+      toast.error(err.message);
+    },
   });
 }
 
-// --- 3. Hook Logout ---
+/* ======================================================
+ * 3. LOGOUT
+ * ==================================================== */
 export function useLogout() {
   const queryClient = useQueryClient();
+
   return () => {
     localStorage.removeItem('posq_token');
-    queryClient.setQueryData(['currentUser'], null);
     queryClient.clear();
-    toast.info('Anda telah keluar');
-    // window.location.href = '/login'; // Opsional, App.tsx akan handle ini
+    toast.info('Anda telah logout');
   };
 }
