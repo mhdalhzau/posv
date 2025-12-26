@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useCurrentUser } from './hooks/useAuth'; // Gunakan hook baru ini
 import { ThemeProvider } from 'next-themes';
+import './index.css'; 
 import { Toaster } from '@/components/ui/sonner';
 
 // Halaman-halaman

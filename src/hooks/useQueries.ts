@@ -66,39 +66,30 @@ export function useGetCallerUserProfile() {
     queryKey: ['currentUserProfile'],
     queryFn: async () => {
       try {
-        const data = await fetchAPI<any>('/profile');
-        return {
-          name: data.name,
-          role: data.role as UserRole,
-          outletId: data.outlet_id ? BigInt(data.outlet_id) : null,
-        };
+        // PERUBAHAN: Ganti '/profile' dengan '/auth/me'
+        const data = await fetchAPI<any>('/auth/me');
+        
+        // Sesuaikan dengan struktur respons yang Anda lihat di testing
+        // Respons: {"success":true,"user":{"id":1,"name":"tekrabyte","role":"administrator",...}}
+        if (data.success && data.user) {
+          return {
+            name: data.user.name,
+            role: data.user.role as UserRole,
+            outletId: data.user.outlet_id ? BigInt(data.user.outlet_id) : null,
+            // Tambahkan field lain jika diperlukan
+            id: BigInt(data.user.id),
+            email: data.user.email,
+            username: data.user.username,
+            is_admin: data.user.is_admin || data.user.role === 'administrator'
+          };
+        }
+        return null;
       } catch (e) {
+        console.error('Failed to fetch user profile:', e);
         return null;
       }
     },
     retry: false,
-  });
-}
-
-export function useSaveCallerUserProfile() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (profile: UserProfile) => {
-      // Pastikan BigInt dikonversi ke string/number sebelum dikirim
-      const payload = {
-        ...profile,
-        outletId: profile.outletId ? Number(profile.outletId) : null
-      };
-      return fetchAPI('/profile', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['currentUserProfile'] });
-      toast.success('Profil berhasil disimpan');
-    },
-    onError: (e: Error) => toast.error(e.message),
   });
 }
 
@@ -107,8 +98,12 @@ export function useIsCallerAdmin() {
     queryKey: ['isAdmin'],
     queryFn: async () => {
       try {
-        const data = await fetchAPI<any>('/profile');
-        return data.role === 'owner' || (data.roles && data.roles.includes('administrator'));
+        // PERUBAHAN: Ganti '/profile' dengan '/auth/me'
+        const data = await fetchAPI<any>('/auth/me');
+        if (data.success && data.user) {
+          return data.user.role === 'administrator' || data.user.is_admin === true;
+        }
+        return false;
       } catch {
         return false;
       }
@@ -120,9 +115,23 @@ export function useGetCallerUserRole() {
   return useQuery<UserRole>({
     queryKey: ['userRole'],
     queryFn: async () => {
-      const data = await fetchAPI<any>('/profile');
-      return data.role as UserRole;
+      // PERUBAHAN: Ganti '/profile' dengan '/auth/me'
+      const data = await fetchAPI<any>('/auth/me');
+      if (data.success && data.user) {
+        return data.user.role as UserRole;
+      }
+      throw new Error('Failed to get user role');
     },
+  });
+}
+
+// Untuk endpoint /profile (jika masih ada kebutuhan lain)
+export function useGetProfileLegacy() {
+  return useQuery({
+    queryKey: ['profileLegacy'],
+    queryFn: () => fetchAPI('/profile'),
+    retry: false,
+    enabled: false, // Nonaktifkan secara default
   });
 }
 
@@ -134,6 +143,7 @@ export function useListAllUsers() {
   return useQuery<Array<[string, UserProfile]>>({
     queryKey: ['allUsers'],
     queryFn: async () => {
+      // Jika endpoint users ada, gunakan itu
       const users = await fetchAPI<any[]>('/users');
       return users.map(u => [
         u.id.toString(),
