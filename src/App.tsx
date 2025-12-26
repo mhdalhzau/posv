@@ -1,12 +1,11 @@
-// src/App.tsx
 import { useState } from 'react';
-import { AuthProvider, useAuth } from './hooks/useAuth'; // Import Auth baru
-// Hapus import useInternetIdentity dan useGetCallerUserProfile jika tidak dipakai lagi untuk auth awal
+import { useCurrentUser } from './hooks/useAuth'; // Gunakan hook baru ini
 import { ThemeProvider } from 'next-themes';
 import { Toaster } from '@/components/ui/sonner';
+
+// Halaman-halaman
 import LoginPage from './pages/LoginPage';
 import MainLayout from './components/MainLayout';
-// ... import halaman lainnya tetap sama
 import DashboardPage from './pages/DashboardPage';
 import ProductManagementPage from './pages/ProductManagementPage';
 import POSPage from './pages/POSPage';
@@ -16,20 +15,27 @@ import StaffManagementPage from './pages/StaffManagementPage';
 import StockManagementPage from './pages/StockManagementPage';
 import CategoryBrandPage from './pages/CategoryBrandPage';
 import SettingsPage from './pages/SettingsPage';
-// ProfileSetupModal mungkin tidak diperlukan lagi jika data user langsung didapat dari login database backend standar, 
-// tapi jika masih butuh, logika bisa disesuaikan.
 
-// Komponen Wrapper untuk menangani logika Auth di dalam Provider
-const AppContent = () => {
-  const { user, isAuthenticated } = useAuth();
+function AppContent() {
+  // 1. Ambil data user dari React Query
+  const { data: user, isLoading } = useCurrentUser();
   const [currentPage, setCurrentPage] = useState<string>('dashboard');
 
-  // Jika belum login, tampilkan Login Page
-  if (!isAuthenticated) {
+  // 2. Tampilkan Loading saat cek token (agar tidak flickering ke login page)
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-100">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  // 3. Jika user tidak ada (belum login / token expired), tampilkan Login Page
+  if (!user) {
     return <LoginPage />;
   }
 
-  // Router sederhana
+  // 4. Router Sederhana (Hanya render jika user sudah login)
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard': return <DashboardPage />;
@@ -50,14 +56,13 @@ const AppContent = () => {
       {renderPage()}
     </MainLayout>
   );
-};
+}
 
 export default function App() {
   return (
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
+      {/* HAPUS AuthProvider, karena QueryClientProvider sudah ada di main.tsx */}
+      <AppContent />
       <Toaster />
     </ThemeProvider>
   );

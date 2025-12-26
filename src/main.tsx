@@ -1,9 +1,8 @@
 import ReactDOM from 'react-dom/client';
-// --- Pastikan baris ini ada! ---
 import './index.css'; 
-// -------------------------------
 import { initEditor } from './hooks/useEditor';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { BrowserRouter } from 'react-router-dom'; // <--- 1. TAMBAHKAN IMPORT INI
 import App from './App';
 
 const queryClient = new QueryClient();
@@ -16,6 +15,9 @@ if (document.readyState === 'loading') {
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
-        <App />
+        {/* 2. BUNGKUS APP DENGAN BROWSER ROUTER */}
+        <BrowserRouter>
+            <App />
+        </BrowserRouter>
     </QueryClientProvider>
 );

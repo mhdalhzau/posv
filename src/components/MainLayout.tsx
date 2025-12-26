@@ -1,4 +1,4 @@
-import { useAuth } from '../hooks/useAuth';
+import { useCurrentUser, useLogout } from '../hooks/useAuth'; // UBAH IMPORT INI
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import {
@@ -34,20 +34,20 @@ interface MainLayoutProps {
 }
 
 export default function MainLayout({ children, currentPage, onNavigate }: MainLayoutProps) {
-  // Ganti hook lama dengan useAuth
-  const { user, logout } = useAuth();
+  // --- PERBAIKAN: Ganti useAuth() dengan hook React Query ---
+  const { data: user } = useCurrentUser(); 
+  const logout = useLogout();
+  // ---------------------------------------------------------
+
   const queryClient = useQueryClient();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Tentukan apakah user adalah owner
-  const isOwner = user?.role === AppRole.owner;
-
-  const handleLogout = async () => {
+  const handleLogout = () => {
     logout();
     queryClient.clear();
   };
 
-  // Konfigurasi akses menu berdasarkan Role (Pengganti useGetRoleMenuAccess)
+  // Konfigurasi akses menu berdasarkan Role
   const getAccessibleMenus = (role?: AppRole): string[] => {
     if (!role) return [];
 
@@ -66,9 +66,8 @@ export default function MainLayout({ children, currentPage, onNavigate }: MainLa
     switch (role) {
       case AppRole.owner:
       case AppRole.manager:
-        return allMenus; // Akses penuh
+        return allMenus;
       case AppRole.cashier:
-        // Kasir hanya akses POS, Produk, Stok, Kategori (contoh)
         return ['dashboard', 'pos', 'products', 'stock', 'categories'];
       default:
         return [];
@@ -77,12 +76,10 @@ export default function MainLayout({ children, currentPage, onNavigate }: MainLa
 
   const allowedMenus = getAccessibleMenus(user?.role);
 
-  // Helper function to check if a menu is accessible
   const isMenuAccessible = (menuKey: string): boolean => {
     return allowedMenus.includes(menuKey);
   };
 
-  // Define all possible navigation items
   const allNavigationItems = [
     { name: 'Dashboard', page: 'dashboard', icon: LayoutDashboard, menuKey: 'dashboard' },
     { name: 'Kasir (POS)', page: 'pos', icon: ShoppingCart, menuKey: 'pos' },
@@ -95,14 +92,14 @@ export default function MainLayout({ children, currentPage, onNavigate }: MainLa
     { name: 'Pengaturan', page: 'settings', icon: Settings, menuKey: 'settings' },
   ];
 
-  // Filter navigation based on menu access configuration
   const navigation = allNavigationItems.filter(item => isMenuAccessible(item.menuKey));
 
-  // Redirect to first accessible page if current page is not accessible
+  // Redirect jika halaman tidak bisa diakses
   useEffect(() => {
     if (user && navigation.length > 0) {
       const currentPageAccessible = navigation.some(item => item.page === currentPage);
-      if (!currentPageAccessible) {
+      // Cek agar tidak redirect loop jika sedang di halaman valid
+      if (!currentPageAccessible && currentPage !== 'login') {
         onNavigate(navigation[0].page);
       }
     }
