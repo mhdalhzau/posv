@@ -178,3 +178,4 @@ export const useQRScanner = (config: QRScannerConfig) => {
         canStartScanning: jsQRLoaded && camera.isSupported === true && !camera.isLoading
     };
 };
+

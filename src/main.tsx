@@ -1,5 +1,5 @@
 import ReactDOM from 'react-dom/client';
-import './index.css'; 
+import './index.css';
 import { initEditor } from './hooks/useEditor';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom'; // <--- 1. TAMBAHKAN IMPORT INI

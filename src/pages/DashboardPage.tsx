@@ -1,23 +1,41 @@
-import { useGetCallerUserProfile, useIsCallerAdmin, useListOutlets, useGetDailySummaryOutlet, useGetOverallSummaryOutlet, useGetBestSellers, useListProductsByOutlet, useGetTopOutlets, useGetOutlet } from '../hooks/useQueries';
+import { useGetCallerUserProfile, useIsCallerAdmin, useListOutlets, useGetDailySummaryOutlet, useGetOverallSummaryOutlet, useGetBestSellers, useListProductsByOutlet, useGetTopOutlets, useGetOutlet, useListAllUsers, useGetCallerUserRole } from '../hooks/useQueries';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { TrendingUp, DollarSign, ShoppingCart, Package, Store } from 'lucide-react';
+import { TrendingUp, DollarSign, ShoppingCart, Package, Store, Users, UserCircle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { UserRole } from '../backend';
+import { useEffect } from 'react';
 
-export default function DashboardPage() {
+interface DashboardPageProps {
+  onNavigate?: (page: string) => void;
+}
+
+export default function DashboardPage({ onNavigate }: DashboardPageProps = {}) {
   const { data: userProfile } = useGetCallerUserProfile();
+  const { data: userRole } = useGetCallerUserRole();
   const { data: isAdmin } = useIsCallerAdmin();
   const { data: outlets } = useListOutlets();
 
   const isOwner = isAdmin;
+  const isCustomer = userRole === UserRole.guest;
+  const isStaff = userRole === UserRole.admin || userRole === UserRole.user;
   const userOutletId = userProfile?.outletId;
 
-  // Owner sees all outlets aggregated
-  // Manager/Cashier sees their assigned outlet
-  const targetOutletId = isOwner ? null : userOutletId;
+  // Redirect customers to kiosk
+  useEffect(() => {
+    if (isCustomer && onNavigate) {
+      onNavigate('kiosk');
+    }
+  }, [isCustomer, onNavigate]);
+
+  // Don't render anything for customers since they're being redirected
+  if (isCustomer) {
+    return null;
+  }
 
   if (isOwner) {
-    return <OwnerDashboard outlets={outlets || []} />;
+    return <OwnerDashboard outlets={outlets || []} onNavigate={onNavigate} />;
   } else if (userOutletId) {
     return <OutletDashboard outletId={userOutletId} />;
   } else {
@@ -32,8 +50,9 @@ export default function DashboardPage() {
   }
 }
 
-function OwnerDashboard({ outlets }: { outlets: any[] }) {
+function OwnerDashboard({ outlets, onNavigate }: { outlets: any[]; onNavigate?: (page: string) => void }) {
   const { data: topOutlets, isLoading: topOutletsLoading } = useGetTopOutlets();
+  const { data: allUsers } = useListAllUsers();
 
   const formatCurrency = (amount: bigint) => {
     return new Intl.NumberFormat('id-ID', {
@@ -46,6 +65,7 @@ function OwnerDashboard({ outlets }: { outlets: any[] }) {
   // Calculate aggregated stats
   const totalRevenue = topOutlets?.reduce((sum, [_, revenue]) => sum + Number(revenue), 0) || 0;
   const activeOutlets = outlets.filter(o => o.isActive).length;
+  const customers = allUsers?.filter(([_, profile]) => profile.role === UserRole.guest) || [];
 
   const getOutletName = (outletId: bigint) => {
     const outlet = outlets.find(o => o.id === outletId);
@@ -110,15 +130,66 @@ function OwnerDashboard({ outlets }: { outlets: any[] }) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Status</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Total Pelanggan</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">Operasional</p>
-            <p className="text-xs text-muted-foreground mt-1">Semua sistem normal</p>
+            <p className="text-2xl font-bold">{customers.length}</p>
+            <p className="text-xs text-muted-foreground mt-1">Pelanggan terdaftar</p>
           </CardContent>
         </Card>
       </div>
+
+      {/* Customer Menu Section */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <UserCircle className="h-5 w-5" />
+                Menu Pelanggan
+              </CardTitle>
+              <CardDescription>Kelola dan pantau aktivitas pelanggan</CardDescription>
+            </div>
+            {onNavigate && (
+              <Button onClick={() => onNavigate('customers')}>
+                Lihat Semua
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Total Pelanggan</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold">{customers.length}</p>
+                <p className="text-xs text-muted-foreground mt-1">Pelanggan aktif</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Pembelian Hari Ini</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold">0</p>
+                <p className="text-xs text-muted-foreground mt-1">Transaksi kiosk</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Pendapatan Kiosk</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold">Rp 0</p>
+                <p className="text-xs text-muted-foreground mt-1">Total hari ini</p>
+              </CardContent>
+            </Card>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Top Outlets */}
       <Card>

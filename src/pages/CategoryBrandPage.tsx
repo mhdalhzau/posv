@@ -30,7 +30,7 @@ import { Plus, Pencil, Trash2, Tag, Eye } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import type { Category, Brand } from '../backend';
+import type { Category, Brand } from '../types/backend';
 
 export default function CategoryBrandPage() {
   const { data: isAdmin } = useIsCallerAdmin();

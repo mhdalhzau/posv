@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { useGetCallerUserProfile, useListOutlets, useListProductsByOutlet, useListActivePackages, useListActiveBundles, useCreateTransaction, useGetUserTransactionHistory, useGetPaymentSettings, useUploadPaymentProof } from '../hooks/useQueries';
-import { useInternetIdentity } from '../hooks/useAuth';
+import { useListOutlets, useListProductsByOutlet, useListActivePackages, useListActiveBundles, useCreateTransaction, useGetUserTransactionHistory, useGetPaymentSettings, useUploadPaymentProof } from '../hooks/useQueries';
+import { useInternetIdentity } from '../hooks/useInternetIdentity';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -17,7 +17,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ShoppingCart, Plus, Minus, Trash2, Package, Box, Clock, CheckCircle2, XCircle, AlertCircle, ShoppingBag, Truck, QrCode, Building2, User, LogIn, Upload, X } from 'lucide-react';
 import { calculatePackageStock, calculateBundleStock } from '../lib/packageStockCalculator';
-import { PaymentCategory, PaymentSubCategory, OrderStatus } from '../backend';
+import { OrderStatus, PaymentCategory, PaymentSubCategory } from '../backend';
 import type { TransactionItem, PaymentMethod } from '../types';
 import type { GuestCustomerData } from '../backend';
 import { toast } from 'sonner';
@@ -35,14 +35,12 @@ interface GuestProfileData {
   name: string;
   phone: string;
   address: string;
-  password: string;
 }
 
 const GUEST_DATA_KEY = 'kiosk_guest_data';
 
 export default function KioskPage() {
   const { identity, login } = useInternetIdentity();
-  const { data: userProfile } = useGetCallerUserProfile();
   const { data: outlets } = useListOutlets();
   const [selectedOutletId, setSelectedOutletId] = useState<bigint | null>(null);
   const { data: products } = useListProductsByOutlet(selectedOutletId);
@@ -59,12 +57,10 @@ export default function KioskPage() {
   const [showPaymentInstructions, setShowPaymentInstructions] = useState(false);
   const [paymentProofFile, setPaymentProofFile] = useState<File | null>(null);
   const [paymentProofPreview, setPaymentProofPreview] = useState<string | null>(null);
-  const [currentTransactionId, setCurrentTransactionId] = useState<bigint | null>(null);
   const [guestData, setGuestData] = useState<GuestProfileData>({
     name: '',
     phone: '',
     address: '',
-    password: '',
   });
   const createTransaction = useCreateTransaction();
   const uploadPaymentProof = useUploadPaymentProof();
@@ -75,18 +71,26 @@ export default function KioskPage() {
 
   // Load guest data from localStorage on mount
   useEffect(() => {
-    if (isGuest) {
-      const savedData = localStorage.getItem(GUEST_DATA_KEY);
-      if (savedData) {
-        try {
-          const parsed = JSON.parse(savedData);
-          setGuestData(parsed);
-        } catch (e) {
-          console.error('Failed to parse guest data:', e);
-        }
+    const savedData = localStorage.getItem(GUEST_DATA_KEY);
+    if (savedData) {
+      try {
+        const parsed = JSON.parse(savedData);
+        setGuestData(parsed);
+      } catch (e) {
+        console.error('Failed to parse guest data:', e);
       }
     }
-  }, [isGuest]);
+  }, []);
+
+  // Auto-select first active outlet if available
+  useEffect(() => {
+    if (outlets && outlets.length > 0 && !selectedOutletId) {
+      const firstActiveOutlet = outlets.find(o => o.isActive);
+      if (firstActiveOutlet) {
+        setSelectedOutletId(firstActiveOutlet.id);
+      }
+    }
+  }, [outlets, selectedOutletId]);
 
   // Calculate stock for packages and bundles
   const packagesWithStock = useMemo(() => {
@@ -152,10 +156,16 @@ export default function KioskPage() {
             ? { ...i, quantity: i.quantity + 1 }
             : i
         ));
+        toast.success(`${item.name} ditambahkan ke keranjang`);
+      } else {
+        toast.error('Stok tidak mencukupi');
       }
     } else {
       if (item.availableStock > 0n) {
         setCart([...cart, { ...item, quantity: 1 }]);
+        toast.success(`${item.name} ditambahkan ke keranjang`);
+      } else {
+        toast.error('Stok habis');
       }
     }
   };
@@ -165,7 +175,10 @@ export default function KioskPage() {
       if (item.id === id && item.type === type) {
         const newQuantity = item.quantity + delta;
         if (newQuantity <= 0) return item;
-        if (newQuantity > Number(item.availableStock)) return item;
+        if (newQuantity > Number(item.availableStock)) {
+          toast.error('Stok tidak mencukupi');
+          return item;
+        }
         return { ...item, quantity: newQuantity };
       }
       return item;
@@ -174,11 +187,17 @@ export default function KioskPage() {
 
   const removeFromCart = (id: bigint, type: string) => {
     setCart(cart.filter(item => !(item.id === id && item.type === type)));
+    toast.success('Item dihapus dari keranjang');
   };
 
   const cartTotal = cart.reduce((sum, item) => sum + Number(item.price) * item.quantity, 0);
 
   const handleCheckoutClick = () => {
+    if (cart.length === 0) {
+      toast.error('Keranjang masih kosong');
+      return;
+    }
+    
     if (isGuest && !guestData.name) {
       setShowGuestForm(true);
     } else {
@@ -187,7 +206,8 @@ export default function KioskPage() {
   };
 
   const handleGuestFormSubmit = () => {
-    if (!guestData.name || !guestData.phone || !guestData.password) {
+    if (!guestData.name || !guestData.phone) {
+      toast.error('Nama dan nomor HP wajib diisi');
       return;
     }
 
@@ -197,9 +217,18 @@ export default function KioskPage() {
   };
 
   const handleProceedToPayment = () => {
-    if (!orderType || !paymentMethod) return;
+    if (!orderType) {
+      toast.error('Pilih jenis pesanan terlebih dahulu');
+      return;
+    }
+    
+    if (!paymentMethod) {
+      toast.error('Pilih metode pembayaran terlebih dahulu');
+      return;
+    }
 
     if (orderType === 'delivery' && isGuest && !guestData.address) {
+      toast.error('Alamat wajib diisi untuk delivery');
       return;
     }
 
@@ -238,7 +267,10 @@ export default function KioskPage() {
   };
 
   const handleConfirmPayment = async () => {
-    if (!selectedOutletId || cart.length === 0 || !orderType || !paymentMethod) return;
+    if (!selectedOutletId || cart.length === 0 || !orderType || !paymentMethod) {
+      toast.error('Data checkout tidak lengkap');
+      return;
+    }
 
     const items: TransactionItem[] = cart.map(item => ({
       productId: item.id,
@@ -258,7 +290,7 @@ export default function KioskPage() {
     const guestCustomerData: GuestCustomerData | null = isGuest ? {
       name: guestData.name,
       phone: guestData.phone,
-      address: guestData.address,
+      address: guestData.address || '',
     } : null;
 
     try {
@@ -284,7 +316,8 @@ export default function KioskPage() {
       setPaymentMethod('');
       setPaymentProofFile(null);
       setPaymentProofPreview(null);
-      setCurrentTransactionId(null);
+      
+      toast.success('Pesanan berhasil dibuat! Staff akan memproses pesanan Anda.');
     } catch (error) {
       console.error('Checkout error:', error);
     }
@@ -298,19 +331,15 @@ export default function KioskPage() {
     }
   };
 
-  const hasOrderTypeError = showCheckout && !orderType;
-  const hasPaymentMethodError = showCheckout && orderType && !paymentMethod;
-  const hasAddressError = showCheckout && orderType === 'delivery' && isGuest && !guestData.address;
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Kiosk</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Kiosk Belanja</h1>
           <p className="text-muted-foreground">
             {isAuthenticated 
-              ? `Selamat datang, ${userProfile?.name}! Pilih produk untuk dibeli`
-              : 'Selamat datang! Jelajahi produk kami'}
+              ? 'Selamat berbelanja! Pilih produk yang Anda inginkan'
+              : 'Selamat datang! Jelajahi produk kami dan belanja tanpa perlu login'}
           </p>
         </div>
         <div className="flex gap-2">
@@ -332,7 +361,7 @@ export default function KioskPage() {
         <Alert>
           <User className="h-4 w-4" />
           <AlertDescription>
-            Anda sedang berbelanja sebagai tamu. Login untuk melacak pesanan Anda secara permanen.
+            Anda sedang berbelanja sebagai tamu. Anda dapat langsung berbelanja tanpa login. Login jika ingin melacak pesanan secara permanen.
           </AlertDescription>
         </Alert>
       )}
@@ -372,121 +401,139 @@ export default function KioskPage() {
 
               <TabsContent value="products" className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
-                  {products?.map(product => (
-                    <Card key={product.id.toString()} className="overflow-hidden">
-                      <CardHeader>
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <CardTitle className="text-lg">{product.name}</CardTitle>
-                            <CardDescription className="text-xl font-bold text-primary mt-2">
-                              {formatCurrency(product.price)}
-                            </CardDescription>
+                  {products && products.length > 0 ? (
+                    products.map(product => (
+                      <Card key={product.id.toString()} className="overflow-hidden">
+                        <CardHeader>
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <CardTitle className="text-lg">{product.name}</CardTitle>
+                              <CardDescription className="text-xl font-bold text-primary mt-2">
+                                {formatCurrency(product.price)}
+                              </CardDescription>
+                            </div>
+                            <Badge variant={product.stock > 0n ? 'default' : 'secondary'}>
+                              Stok: {product.stock.toString()}
+                            </Badge>
                           </div>
-                          <Badge variant={product.stock > 0n ? 'default' : 'secondary'}>
-                            Stok: {product.stock.toString()}
-                          </Badge>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <Button
-                          onClick={() => addToCart({
-                            id: product.id,
-                            name: product.name,
-                            price: product.price,
-                            type: 'product',
-                            availableStock: product.stock,
-                          })}
-                          disabled={product.stock === 0n}
-                          className="w-full"
-                        >
-                          <Plus className="mr-2 h-4 w-4" />
-                          Tambah ke Keranjang
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  ))}
+                        </CardHeader>
+                        <CardContent>
+                          <Button
+                            onClick={() => addToCart({
+                              id: product.id,
+                              name: product.name,
+                              price: product.price,
+                              type: 'product',
+                              availableStock: product.stock,
+                            })}
+                            disabled={product.stock === 0n}
+                            className="w-full"
+                          >
+                            <Plus className="mr-2 h-4 w-4" />
+                            Tambah ke Keranjang
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    ))
+                  ) : (
+                    <div className="col-span-2 text-center py-8 text-muted-foreground">
+                      Belum ada produk tersedia
+                    </div>
+                  )}
                 </div>
               </TabsContent>
 
               <TabsContent value="packages" className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
-                  {packagesWithStock?.map(pkg => (
-                    <Card key={pkg.id.toString()} className="overflow-hidden">
-                      <CardHeader>
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <Package className="h-4 w-4 text-primary" />
-                              <CardTitle className="text-lg">{pkg.name}</CardTitle>
+                  {packagesWithStock && packagesWithStock.length > 0 ? (
+                    packagesWithStock.map(pkg => (
+                      <Card key={pkg.id.toString()} className="overflow-hidden">
+                        <CardHeader>
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <Package className="h-4 w-4 text-primary" />
+                                <CardTitle className="text-lg">{pkg.name}</CardTitle>
+                              </div>
+                              <CardDescription className="text-xl font-bold text-primary mt-2">
+                                {formatCurrency(pkg.price)}
+                              </CardDescription>
                             </div>
-                            <CardDescription className="text-xl font-bold text-primary mt-2">
-                              {formatCurrency(pkg.price)}
-                            </CardDescription>
+                            <Badge variant={pkg.calculatedStock > 0n ? 'default' : 'secondary'}>
+                              Stok: {pkg.calculatedStock.toString()}
+                            </Badge>
                           </div>
-                          <Badge variant={pkg.calculatedStock > 0n ? 'default' : 'secondary'}>
-                            Stok: {pkg.calculatedStock.toString()}
-                          </Badge>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <Button
-                          onClick={() => addToCart({
-                            id: pkg.id,
-                            name: pkg.name,
-                            price: pkg.price,
-                            type: 'package',
-                            availableStock: pkg.calculatedStock,
-                          })}
-                          disabled={pkg.calculatedStock === 0n}
-                          className="w-full"
-                        >
-                          <Plus className="mr-2 h-4 w-4" />
-                          Tambah ke Keranjang
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  ))}
+                        </CardHeader>
+                        <CardContent>
+                          <Button
+                            onClick={() => addToCart({
+                              id: pkg.id,
+                              name: pkg.name,
+                              price: pkg.price,
+                              type: 'package',
+                              availableStock: pkg.calculatedStock,
+                            })}
+                            disabled={pkg.calculatedStock === 0n}
+                            className="w-full"
+                          >
+                            <Plus className="mr-2 h-4 w-4" />
+                            Tambah ke Keranjang
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    ))
+                  ) : (
+                    <div className="col-span-2 text-center py-8 text-muted-foreground">
+                      Belum ada paket tersedia
+                    </div>
+                  )}
                 </div>
               </TabsContent>
 
               <TabsContent value="bundles" className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
-                  {bundlesWithStock?.map(bundle => (
-                    <Card key={bundle.id.toString()} className="overflow-hidden">
-                      <CardHeader>
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <Box className="h-4 w-4 text-primary" />
-                              <CardTitle className="text-lg">{bundle.name}</CardTitle>
+                  {bundlesWithStock && bundlesWithStock.length > 0 ? (
+                    bundlesWithStock.map(bundle => (
+                      <Card key={bundle.id.toString()} className="overflow-hidden">
+                        <CardHeader>
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <Box className="h-4 w-4 text-primary" />
+                                <CardTitle className="text-lg">{bundle.name}</CardTitle>
+                              </div>
+                              <CardDescription className="text-xl font-bold text-primary mt-2">
+                                {formatCurrency(bundle.price)}
+                              </CardDescription>
                             </div>
-                            <CardDescription className="text-xl font-bold text-primary mt-2">
-                              {formatCurrency(bundle.price)}
-                            </CardDescription>
+                            <Badge variant={bundle.calculatedStock > 0n ? 'default' : 'secondary'}>
+                              Stok: {bundle.calculatedStock.toString()}
+                            </Badge>
                           </div>
-                          <Badge variant={bundle.calculatedStock > 0n ? 'default' : 'secondary'}>
-                            Stok: {bundle.calculatedStock.toString()}
-                          </Badge>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <Button
-                          onClick={() => addToCart({
-                            id: bundle.id,
-                            name: bundle.name,
-                            price: bundle.price,
-                            type: 'bundle',
-                            availableStock: bundle.calculatedStock,
-                          })}
-                          disabled={bundle.calculatedStock === 0n}
-                          className="w-full"
-                        >
-                          <Plus className="mr-2 h-4 w-4" />
-                          Tambah ke Keranjang
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  ))}
+                        </CardHeader>
+                        <CardContent>
+                          <Button
+                            onClick={() => addToCart({
+                              id: bundle.id,
+                              name: bundle.name,
+                              price: bundle.price,
+                              type: 'bundle',
+                              availableStock: bundle.calculatedStock,
+                            })}
+                            disabled={bundle.calculatedStock === 0n}
+                            className="w-full"
+                          >
+                            <Plus className="mr-2 h-4 w-4" />
+                            Tambah ke Keranjang
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    ))
+                  ) : (
+                    <div className="col-span-2 text-center py-8 text-muted-foreground">
+                      Belum ada bundle tersedia
+                    </div>
+                  )}
                 </div>
               </TabsContent>
             </Tabs>
@@ -608,19 +655,8 @@ export default function KioskPage() {
                 onChange={(e) => setGuestData({ ...guestData, address: e.target.value })}
                 rows={3}
               />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="guest-password">Password *</Label>
-              <Input
-                id="guest-password"
-                type="password"
-                placeholder="Buat password untuk tracking pesanan"
-                value={guestData.password}
-                onChange={(e) => setGuestData({ ...guestData, password: e.target.value })}
-              />
               <p className="text-xs text-muted-foreground">
-                Password ini untuk melacak pesanan Anda di masa mendatang
+                Alamat wajib diisi jika Anda memilih delivery
               </p>
             </div>
 
@@ -638,7 +674,7 @@ export default function KioskPage() {
             </Button>
             <Button
               onClick={handleGuestFormSubmit}
-              disabled={!guestData.name || !guestData.phone || !guestData.password}
+              disabled={!guestData.name || !guestData.phone}
             >
               Lanjutkan Pesanan
             </Button>
@@ -691,18 +727,6 @@ export default function KioskPage() {
                   </div>
                 )}
               </RadioGroup>
-              {hasOrderTypeError && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>Pilih jenis pesanan terlebih dahulu</AlertDescription>
-                </Alert>
-              )}
-              {hasAddressError && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>Alamat wajib diisi untuk delivery. Kembali ke form profil untuk mengisi alamat.</AlertDescription>
-                </Alert>
-              )}
             </div>
 
             {orderType && (
@@ -738,12 +762,6 @@ export default function KioskPage() {
                       </div>
                     )}
                   </RadioGroup>
-                  {hasPaymentMethodError && (
-                    <Alert variant="destructive">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>Pilih metode pembayaran terlebih dahulu</AlertDescription>
-                    </Alert>
-                  )}
                 </div>
               </>
             )}
@@ -841,7 +859,7 @@ export default function KioskPage() {
 
             {/* Payment Proof Upload */}
             <div className="space-y-3">
-              <Label>Upload Bukti Pembayaran</Label>
+              <Label>Upload Bukti Pembayaran (Opsional)</Label>
               <div className="space-y-2">
                 <input
                   ref={fileInputRef}
@@ -948,4 +966,3 @@ export default function KioskPage() {
     </div>
   );
 }
-

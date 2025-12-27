@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useListProductsByOutlet, useListActivePackages, useGetCallerUserProfile, useCreateTransaction } from '../hooks/useQueries';
+import { useListProductsByOutlet, useListActivePackages, useGetCallerUserProfile, useCreateTransaction, useListTransactions, useUpdateTransactionStatus } from '../hooks/useQueries';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -7,10 +7,12 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { ShoppingCart, Plus, Minus, Trash2, CreditCard, Smartphone, Truck, Package } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ShoppingCart, Plus, Minus, Trash2, CreditCard, Smartphone, Truck, Package, Clock, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
-import { PaymentCategory, PaymentSubCategory } from '../backend';
+import { PaymentCategory, PaymentSubCategory, OrderStatus } from '../backend';
 import type { TransactionItem, PaymentMethod } from '../types';
 import { calculatePackageStock } from '../lib/packageStockCalculator';
 
@@ -37,12 +39,15 @@ export default function POSPage() {
   const userOutletId = userProfile?.outletId;
   const { data: products, isLoading: productsLoading } = useListProductsByOutlet(userOutletId || null);
   const { data: packages, isLoading: packagesLoading } = useListActivePackages(userOutletId || null);
+  const { data: transactions } = useListTransactions(userOutletId || BigInt(0));
   const createTransaction = useCreateTransaction();
+  const updateStatus = useUpdateTransactionStatus();
 
   const [cart, setCart] = useState<CartItem[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodInput[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'products' | 'packages'>('products');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
 
   // Calculate package stocks dynamically
   const packagesWithStock = useMemo(() => {
@@ -193,6 +198,35 @@ export default function POSPage() {
     );
   };
 
+  const handleStatusChange = (transactionId: bigint, newStatus: OrderStatus) => {
+    updateStatus.mutate({ transactionId, newStatus });
+  };
+
+  const getStatusBadge = (status: OrderStatus) => {
+    const statusConfig = {
+      pending: { label: 'Menunggu', variant: 'secondary' as const, icon: Clock, color: 'text-yellow-600' },
+      processing: { label: 'Diproses', variant: 'default' as const, icon: AlertCircle, color: 'text-blue-600' },
+      ready: { label: 'Siap', variant: 'default' as const, icon: CheckCircle2, color: 'text-green-600' },
+      completed: { label: 'Selesai', variant: 'outline' as const, icon: CheckCircle2, color: 'text-gray-600' },
+      canceled: { label: 'Dibatalkan', variant: 'destructive' as const, icon: XCircle, color: 'text-red-600' },
+    };
+
+    const config = statusConfig[status];
+    const Icon = config.icon;
+
+    return (
+      <Badge variant={config.variant} className="flex items-center gap-1">
+        <Icon className={`h-3 w-3 ${config.color}`} />
+        {config.label}
+      </Badge>
+    );
+  };
+
+  const filteredTransactions = transactions?.filter(t => {
+    if (statusFilter === 'all') return true;
+    return t.status === statusFilter;
+  }) || [];
+
   const filteredProducts = products?.filter(p =>
     p.name.toLowerCase().includes(searchQuery.toLowerCase())
   ) || [];
@@ -209,303 +243,392 @@ export default function POSPage() {
     }).format(Number(amount));
   };
 
+  const formatDate = (timestamp: bigint) => {
+    return new Date(Number(timestamp) / 1000000).toLocaleString('id-ID', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
   const isLoading = productsLoading || packagesLoading;
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Kasir (POS)</h1>
-        <p className="text-muted-foreground">Proses transaksi penjualan produk dan paket</p>
+        <p className="text-muted-foreground">Proses transaksi penjualan dan kelola status pesanan</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Products Section */}
-        <div className="lg:col-span-2 space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Pilih Item</CardTitle>
-              <CardDescription>Cari dan tambahkan produk atau paket ke keranjang</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Input
-                placeholder="Cari produk atau paket..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="mb-4"
-              />
-              <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'products' | 'packages')}>
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="products">Produk Satuan</TabsTrigger>
-                  <TabsTrigger value="packages">Paket</TabsTrigger>
-                </TabsList>
-                <TabsContent value="products" className="mt-4">
-                  {isLoading ? (
-                    <div className="grid grid-cols-2 gap-3">
-                      {[1, 2, 3, 4].map(i => (
-                        <Skeleton key={i} className="h-24 w-full" />
-                      ))}
-                    </div>
-                  ) : filteredProducts.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      Tidak ada produk ditemukan
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-3 max-h-[500px] overflow-y-auto">
-                      {filteredProducts.map((product) => (
-                        <Button
-                          key={product.id.toString()}
-                          variant="outline"
-                          className="h-auto flex flex-col items-start p-4"
-                          onClick={() => addToCart(product, false)}
-                          disabled={product.stock === BigInt(0)}
-                        >
-                          <div className="font-semibold text-left">{product.name}</div>
-                          <div className="text-sm text-muted-foreground">{formatCurrency(product.price)}</div>
-                          <Badge variant={product.stock === BigInt(0) ? 'destructive' : 'secondary'} className="mt-2">
-                            Stok: {product.stock.toString()}
-                          </Badge>
-                        </Button>
-                      ))}
-                    </div>
-                  )}
-                </TabsContent>
-                <TabsContent value="packages" className="mt-4">
-                  {isLoading ? (
-                    <div className="grid grid-cols-2 gap-3">
-                      {[1, 2, 3, 4].map(i => (
-                        <Skeleton key={i} className="h-24 w-full" />
-                      ))}
-                    </div>
-                  ) : filteredPackages.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      Tidak ada paket ditemukan
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-3 max-h-[500px] overflow-y-auto">
-                      {filteredPackages.map((pkg) => (
-                        <Button
-                          key={pkg.id.toString()}
-                          variant="outline"
-                          className="h-auto flex flex-col items-start p-4"
-                          onClick={() => addToCart(pkg, true)}
-                          disabled={pkg.stock === BigInt(0)}
-                        >
-                          <div className="flex items-center gap-1 font-semibold text-left">
-                            <Package className="h-4 w-4" />
-                            {pkg.name}
-                          </div>
-                          <div className="text-sm text-muted-foreground">{formatCurrency(pkg.price)}</div>
-                          <Badge variant={pkg.stock === BigInt(0) ? 'destructive' : 'secondary'} className="mt-2">
-                            Stok: {pkg.stock.toString()} paket
-                          </Badge>
-                        </Button>
-                      ))}
-                    </div>
-                  )}
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
-        </div>
+      <Tabs defaultValue="checkout" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="checkout">Checkout</TabsTrigger>
+          <TabsTrigger value="orders">Kelola Pesanan</TabsTrigger>
+        </TabsList>
 
-        {/* Cart and Payment Section */}
-        <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ShoppingCart className="h-5 w-5" />
-                Keranjang
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {cart.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  Keranjang kosong
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {cart.map((item) => (
-                    <div key={item.id} className="flex items-center justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium truncate flex items-center gap-1">
-                          {item.isPackage && <Package className="h-3 w-3" />}
-                          {item.name}
+        <TabsContent value="checkout" className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Products Section */}
+            <div className="lg:col-span-2 space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Pilih Item</CardTitle>
+                  <CardDescription>Cari dan tambahkan produk atau paket ke keranjang</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Input
+                    placeholder="Cari produk atau paket..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="mb-4"
+                  />
+                  <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'products' | 'packages')}>
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="products">Produk Satuan</TabsTrigger>
+                      <TabsTrigger value="packages">Paket</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="products" className="mt-4">
+                      {isLoading ? (
+                        <div className="grid grid-cols-2 gap-3">
+                          {[1, 2, 3, 4].map(i => (
+                            <Skeleton key={i} className="h-24 w-full" />
+                          ))}
                         </div>
-                        <div className="text-sm text-muted-foreground">
-                          {formatCurrency(item.price)}
+                      ) : filteredProducts.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                          Tidak ada produk ditemukan
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="icon"
-                          variant="outline"
-                          className="h-8 w-8"
-                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                        >
-                          <Minus className="h-3 w-3" />
-                        </Button>
-                        <span className="w-8 text-center">{item.quantity}</span>
-                        <Button
-                          size="icon"
-                          variant="outline"
-                          className="h-8 w-8"
-                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                          disabled={item.quantity >= Number(item.availableStock)}
-                        >
-                          <Plus className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8"
-                          onClick={() => removeFromCart(item.id)}
-                        >
-                          <Trash2 className="h-3 w-3 text-destructive" />
-                        </Button>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-3 max-h-[500px] overflow-y-auto">
+                          {filteredProducts.map((product) => (
+                            <Button
+                              key={product.id.toString()}
+                              variant="outline"
+                              className="h-auto flex flex-col items-start p-4"
+                              onClick={() => addToCart(product, false)}
+                              disabled={product.stock === BigInt(0)}
+                            >
+                              <div className="font-semibold text-left">{product.name}</div>
+                              <div className="text-sm text-muted-foreground">{formatCurrency(product.price)}</div>
+                              <Badge variant={product.stock === BigInt(0) ? 'destructive' : 'secondary'} className="mt-2">
+                                Stok: {product.stock.toString()}
+                              </Badge>
+                            </Button>
+                          ))}
+                        </div>
+                      )}
+                    </TabsContent>
+                    <TabsContent value="packages" className="mt-4">
+                      {isLoading ? (
+                        <div className="grid grid-cols-2 gap-3">
+                          {[1, 2, 3, 4].map(i => (
+                            <Skeleton key={i} className="h-24 w-full" />
+                          ))}
+                        </div>
+                      ) : filteredPackages.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                          Tidak ada paket ditemukan
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-3 max-h-[500px] overflow-y-auto">
+                          {filteredPackages.map((pkg) => (
+                            <Button
+                              key={pkg.id.toString()}
+                              variant="outline"
+                              className="h-auto flex flex-col items-start p-4"
+                              onClick={() => addToCart(pkg, true)}
+                              disabled={pkg.stock === BigInt(0)}
+                            >
+                              <div className="flex items-center gap-1 font-semibold text-left">
+                                <Package className="h-4 w-4" />
+                                {pkg.name}
+                              </div>
+                              <div className="text-sm text-muted-foreground">{formatCurrency(pkg.price)}</div>
+                              <Badge variant={pkg.stock === BigInt(0) ? 'destructive' : 'secondary'} className="mt-2">
+                                Stok: {pkg.stock.toString()} paket
+                              </Badge>
+                            </Button>
+                          ))}
+                        </div>
+                      )}
+                    </TabsContent>
+                  </Tabs>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Cart and Payment Section */}
+            <div className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <ShoppingCart className="h-5 w-5" />
+                    Keranjang
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {cart.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      Keranjang kosong
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {cart.map((item) => (
+                        <div key={item.id} className="flex items-center justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium truncate flex items-center gap-1">
+                              {item.isPackage && <Package className="h-3 w-3" />}
+                              {item.name}
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              {formatCurrency(item.price)}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="icon"
+                              variant="outline"
+                              className="h-8 w-8"
+                              onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                            >
+                              <Minus className="h-3 w-3" />
+                            </Button>
+                            <span className="w-8 text-center">{item.quantity}</span>
+                            <Button
+                              size="icon"
+                              variant="outline"
+                              className="h-8 w-8"
+                              onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                              disabled={item.quantity >= Number(item.availableStock)}
+                            >
+                              <Plus className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8"
+                              onClick={() => removeFromCart(item.id)}
+                            >
+                              <Trash2 className="h-3 w-3 text-destructive" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                      <Separator />
+                      <div className="flex justify-between font-bold text-lg">
+                        <span>Total:</span>
+                        <span>{formatCurrency(calculateTotal())}</span>
                       </div>
                     </div>
-                  ))}
-                  <Separator />
-                  <div className="flex justify-between font-bold text-lg">
-                    <span>Total:</span>
-                    <span>{formatCurrency(calculateTotal())}</span>
-                  </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {cart.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Metode Pembayaran</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <Tabs defaultValue="offline">
+                      <TabsList className="grid w-full grid-cols-3">
+                        <TabsTrigger value="offline">
+                          <CreditCard className="h-4 w-4 mr-2" />
+                          Offline
+                        </TabsTrigger>
+                        <TabsTrigger value="online">
+                          <Smartphone className="h-4 w-4 mr-2" />
+                          Online
+                        </TabsTrigger>
+                        <TabsTrigger value="delivery">
+                          <Truck className="h-4 w-4 mr-2" />
+                          Delivery
+                        </TabsTrigger>
+                      </TabsList>
+                      <TabsContent value="offline" className="space-y-2">
+                        <Button
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => addPaymentMethod(PaymentCategory.offline, 'Tunai')}
+                        >
+                          Tunai
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => addPaymentMethod(PaymentCategory.offline, 'Kartu Debit/Kredit')}
+                        >
+                          Kartu Debit/Kredit
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => addPaymentMethod(PaymentCategory.offline, 'Transfer Bank')}
+                        >
+                          Transfer Bank
+                        </Button>
+                      </TabsContent>
+                      <TabsContent value="online" className="space-y-2">
+                        <Button
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => addPaymentMethod(PaymentCategory.online, 'eWallet', PaymentSubCategory.eWallet)}
+                        >
+                          eWallet
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => addPaymentMethod(PaymentCategory.online, 'QRIS', PaymentSubCategory.qris)}
+                        >
+                          QRIS
+                        </Button>
+                      </TabsContent>
+                      <TabsContent value="delivery" className="space-y-2">
+                        <Button
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => addPaymentMethod(PaymentCategory.foodDelivery, 'ShopeeFood', PaymentSubCategory.shopeeFood)}
+                        >
+                          ShopeeFood
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => addPaymentMethod(PaymentCategory.foodDelivery, 'GoFood', PaymentSubCategory.goFood)}
+                        >
+                          GoFood
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => addPaymentMethod(PaymentCategory.foodDelivery, 'GrabFood', PaymentSubCategory.grabFood)}
+                        >
+                          GrabFood
+                        </Button>
+                      </TabsContent>
+                    </Tabs>
+
+                    {paymentMethods.length > 0 && (
+                      <div className="space-y-3 pt-4 border-t">
+                        <Label>Pembayaran Dipilih:</Label>
+                        {paymentMethods.map((pm) => (
+                          <div key={pm.id} className="flex items-center gap-2">
+                            <div className="flex-1">
+                              <div className="text-sm font-medium">{pm.methodName}</div>
+                              <Input
+                                type="number"
+                                placeholder="Jumlah (Rp)"
+                                value={pm.amount}
+                                onChange={(e) => updatePaymentAmount(pm.id, e.target.value)}
+                                className="mt-1"
+                              />
+                            </div>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => removePaymentMethod(pm.id)}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        ))}
+                        <Separator />
+                        <div className="flex justify-between font-medium">
+                          <span>Total Pembayaran:</span>
+                          <span>{formatCurrency(calculateTotalPayment())}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    <Button
+                      className="w-full"
+                      size="lg"
+                      onClick={handleCheckout}
+                      disabled={createTransaction.isPending || paymentMethods.length === 0}
+                    >
+                      {createTransaction.isPending ? 'Memproses...' : 'Proses Pembayaran'}
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="orders" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Kelola Status Pesanan</CardTitle>
+                  <CardDescription>Perbarui status pesanan customer</CardDescription>
                 </div>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Filter status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua Status</SelectItem>
+                    <SelectItem value="pending">Menunggu</SelectItem>
+                    <SelectItem value="processing">Diproses</SelectItem>
+                    <SelectItem value="ready">Siap</SelectItem>
+                    <SelectItem value="completed">Selesai</SelectItem>
+                    <SelectItem value="canceled">Dibatalkan</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {filteredTransactions.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">Tidak ada pesanan</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>ID</TableHead>
+                      <TableHead>Tanggal</TableHead>
+                      <TableHead>Total</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Aksi</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredTransactions.map((transaction) => (
+                      <TableRow key={transaction.id.toString()}>
+                        <TableCell className="font-mono text-xs">#{transaction.id.toString()}</TableCell>
+                        <TableCell className="text-sm">{formatDate(transaction.timestamp)}</TableCell>
+                        <TableCell className="font-medium">{formatCurrency(transaction.total)}</TableCell>
+                        <TableCell>{getStatusBadge(transaction.status)}</TableCell>
+                        <TableCell>
+                          <Select
+                            value={transaction.status}
+                            onValueChange={(value) => handleStatusChange(transaction.id, value as OrderStatus)}
+                            disabled={updateStatus.isPending}
+                          >
+                            <SelectTrigger className="w-[140px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="pending">Menunggu</SelectItem>
+                              <SelectItem value="processing">Diproses</SelectItem>
+                              <SelectItem value="ready">Siap</SelectItem>
+                              <SelectItem value="completed">Selesai</SelectItem>
+                              <SelectItem value="canceled">Dibatalkan</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               )}
             </CardContent>
           </Card>
-
-          {cart.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Metode Pembayaran</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Tabs defaultValue="offline">
-                  <TabsList className="grid w-full grid-cols-3">
-                    <TabsTrigger value="offline">
-                      <CreditCard className="h-4 w-4 mr-2" />
-                      Offline
-                    </TabsTrigger>
-                    <TabsTrigger value="online">
-                      <Smartphone className="h-4 w-4 mr-2" />
-                      Online
-                    </TabsTrigger>
-                    <TabsTrigger value="delivery">
-                      <Truck className="h-4 w-4 mr-2" />
-                      Delivery
-                    </TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="offline" className="space-y-2">
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => addPaymentMethod(PaymentCategory.offline, 'Tunai')}
-                    >
-                      Tunai
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => addPaymentMethod(PaymentCategory.offline, 'Kartu Debit/Kredit')}
-                    >
-                      Kartu Debit/Kredit
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => addPaymentMethod(PaymentCategory.offline, 'Transfer Bank')}
-                    >
-                      Transfer Bank
-                    </Button>
-                  </TabsContent>
-                  <TabsContent value="online" className="space-y-2">
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => addPaymentMethod(PaymentCategory.online, 'eWallet', PaymentSubCategory.eWallet)}
-                    >
-                      eWallet
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => addPaymentMethod(PaymentCategory.online, 'QRIS', PaymentSubCategory.qris)}
-                    >
-                      QRIS
-                    </Button>
-                  </TabsContent>
-                  <TabsContent value="delivery" className="space-y-2">
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => addPaymentMethod(PaymentCategory.foodDelivery, 'ShopeeFood', PaymentSubCategory.shopeeFood)}
-                    >
-                      ShopeeFood
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => addPaymentMethod(PaymentCategory.foodDelivery, 'GoFood', PaymentSubCategory.goFood)}
-                    >
-                      GoFood
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => addPaymentMethod(PaymentCategory.foodDelivery, 'GrabFood', PaymentSubCategory.grabFood)}
-                    >
-                      GrabFood
-                    </Button>
-                  </TabsContent>
-                </Tabs>
-
-                {paymentMethods.length > 0 && (
-                  <div className="space-y-3 pt-4 border-t">
-                    <Label>Pembayaran Dipilih:</Label>
-                    {paymentMethods.map((pm) => (
-                      <div key={pm.id} className="flex items-center gap-2">
-                        <div className="flex-1">
-                          <div className="text-sm font-medium">{pm.methodName}</div>
-                          <Input
-                            type="number"
-                            placeholder="Jumlah (Rp)"
-                            value={pm.amount}
-                            onChange={(e) => updatePaymentAmount(pm.id, e.target.value)}
-                            className="mt-1"
-                          />
-                        </div>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => removePaymentMethod(pm.id)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    ))}
-                    <Separator />
-                    <div className="flex justify-between font-medium">
-                      <span>Total Pembayaran:</span>
-                      <span>{formatCurrency(calculateTotalPayment())}</span>
-                    </div>
-                  </div>
-                )}
-
-                <Button
-                  className="w-full"
-                  size="lg"
-                  onClick={handleCheckout}
-                  disabled={createTransaction.isPending || paymentMethods.length === 0}
-                >
-                  {createTransaction.isPending ? 'Memproses...' : 'Proses Pembayaran'}
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
-

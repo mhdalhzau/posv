@@ -30,8 +30,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import type { Product, ProductPackage, PackageComponent, Bundle, BundleItem } from '../backend';
+import type { Product, ProductPackage, PackageComponent, Bundle, BundleItem } from '../types/backend';
 import { calculatePackageStock, calculateBundleStock } from '../lib/packageStockCalculator';
+import { toast } from 'sonner';
 
 interface ComponentInput {
   productId: string;
@@ -76,7 +77,7 @@ export default function ProductManagementPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<Product | ProductPackage | Bundle | null>(null);
 
-  // Product form
+  // Product form - always initialize with 'none' as default
   const [productForm, setProductForm] = useState({
     name: '',
     price: '',
@@ -175,14 +176,14 @@ export default function ProductManagementPage() {
         isPackage: i.isPackage,
       })));
     } else {
-      // It's a product
+      // It's a product - ensure categoryId and brandId are always valid strings
       setProductForm({
         name: item.name,
         price: item.price.toString(),
         stock: item.stock.toString(),
         outletId: item.outletId.toString(),
-        categoryId: item.categoryId?.toString() || 'none',
-        brandId: item.brandId?.toString() || 'none',
+        categoryId: item.categoryId ? item.categoryId.toString() : 'none',
+        brandId: item.brandId ? item.brandId.toString() : 'none',
       });
     }
     setIsEditDialogOpen(true);
@@ -199,11 +200,11 @@ export default function ProductManagementPage() {
     if (activeTab === 'products') {
       // Validasi kategori dan brand tidak boleh "none"
       if (productForm.categoryId === 'none') {
-        alert('Silakan pilih kategori untuk produk');
+        toast.error('Silakan pilih kategori untuk produk');
         return;
       }
       if (productForm.brandId === 'none') {
-        alert('Silakan pilih brand untuk produk');
+        toast.error('Silakan pilih brand untuk produk');
         return;
       }
 
@@ -225,7 +226,10 @@ export default function ProductManagementPage() {
       );
     } else if (activeTab === 'packages') {
       const validComponents = packageComponents.filter(c => c.productId && c.quantity);
-      if (validComponents.length === 0) return;
+      if (validComponents.length === 0) {
+        toast.error('Paket harus memiliki minimal satu komponen');
+        return;
+      }
 
       const components: PackageComponent[] = validComponents.map(c => ({
         productId: BigInt(c.productId),
@@ -248,7 +252,10 @@ export default function ProductManagementPage() {
       );
     } else if (activeTab === 'bundles') {
       const validItems = bundleItems.filter(i => (i.isPackage ? i.packageId : i.productId) && i.quantity);
-      if (validItems.length === 0) return;
+      if (validItems.length === 0) {
+        toast.error('Bundle harus memiliki minimal satu item');
+        return;
+      }
 
       const items: BundleItem[] = validItems.map(i => ({
         productId: i.isPackage ? BigInt(0) : BigInt(i.productId),
@@ -281,7 +288,10 @@ export default function ProductManagementPage() {
     if ('components' in selectedItem) {
       // Package
       const validComponents = packageComponents.filter(c => c.productId && c.quantity);
-      if (validComponents.length === 0) return;
+      if (validComponents.length === 0) {
+        toast.error('Paket harus memiliki minimal satu komponen');
+        return;
+      }
 
       const components: PackageComponent[] = validComponents.map(c => ({
         productId: BigInt(c.productId),
@@ -306,7 +316,10 @@ export default function ProductManagementPage() {
     } else if ('items' in selectedItem) {
       // Bundle
       const validItems = bundleItems.filter(i => (i.isPackage ? i.packageId : i.productId) && i.quantity);
-      if (validItems.length === 0) return;
+      if (validItems.length === 0) {
+        toast.error('Bundle harus memiliki minimal satu item');
+        return;
+      }
 
       const items: BundleItem[] = validItems.map(i => ({
         productId: i.isPackage ? BigInt(0) : BigInt(i.productId),
@@ -333,11 +346,11 @@ export default function ProductManagementPage() {
     } else {
       // Product - Validasi kategori dan brand tidak boleh "none"
       if (productForm.categoryId === 'none') {
-        alert('Silakan pilih kategori untuk produk');
+        toast.error('Silakan pilih kategori untuk produk');
         return;
       }
       if (productForm.brandId === 'none') {
-        alert('Silakan pilih brand untuk produk');
+        toast.error('Silakan pilih brand untuk produk');
         return;
       }
 
@@ -425,13 +438,13 @@ export default function ProductManagementPage() {
   };
 
   const getAvailableProducts = (currentOutletId: string) => {
-    if (!products) return [];
+    if (!products || !currentOutletId) return [];
     const outletIdBigInt = BigInt(currentOutletId);
     return products.filter(p => p.outletId === outletIdBigInt && !p.isDeleted);
   };
 
   const getAvailablePackages = (currentOutletId: string) => {
-    if (!packages) return [];
+    if (!packages || !currentOutletId) return [];
     const outletIdBigInt = BigInt(currentOutletId);
     return packages.filter(p => p.outletId === outletIdBigInt && p.isActive);
   };

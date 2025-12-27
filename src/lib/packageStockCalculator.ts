@@ -22,8 +22,11 @@ export function calculatePackageStock(
       return BigInt(0);
     }
 
-    // Calculate how many packages can be made from this component
-    const possiblePackages = product.stock / component.quantity;
+    // FIX: Convert component.quantity (number) to BigInt before division
+    const quantity = BigInt(Math.floor(component.quantity)); // Ensure integer
+    if (quantity === BigInt(0)) continue; // Avoid division by zero if quantity is 0
+
+    const possiblePackages = product.stock / quantity;
 
     // Track the minimum (bottleneck component)
     if (minStock === null || possiblePackages < minStock) {
@@ -68,8 +71,11 @@ export function calculateBundleStock(
       itemStock = product.stock;
     }
 
-    // Calculate how many bundles can be made from this item
-    const possibleBundles = itemStock / item.quantity;
+    // FIX: Convert item.quantity (number) to BigInt before division
+    const quantity = BigInt(Math.floor(item.quantity)); // Ensure integer
+    if (quantity === BigInt(0)) continue;
+
+    const possibleBundles = itemStock / quantity;
 
     // Track the minimum (bottleneck item)
     if (minStock === null || possibleBundles < minStock) {

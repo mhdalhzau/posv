@@ -18,7 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus, Minus, ArrowRightLeft, PackageOpen, Eye, Package } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import type { Product } from '../backend';
+import type { Product } from '../types/backend';
 import { calculatePackageStock } from '../lib/packageStockCalculator';
 
 type StockAction = 'add' | 'reduce' | 'transfer';

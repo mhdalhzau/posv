@@ -1,4 +1,4 @@
-import { useInternetIdentity } from '../hooks/useAuth';
+import { useInternetIdentity } from '../hooks/useInternetIdentity';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ShoppingCart, TrendingUp, Package, Receipt, ArrowLeft } from 'lucide-react';

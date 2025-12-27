@@ -1,6 +1,3 @@
-// src/backend.ts
-
-// Pastikan URL ini benar sesuai settingan WordPress kamu
 export const WP_API_URL = import.meta.env.VITE_WP_API_URL || 'https://erpos.tekrabyte.id/wp-json/posq/v1';
 
 export async function fetchAPI<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -20,10 +17,8 @@ export async function fetchAPI<T>(endpoint: string, options: RequestInit = {}): 
     headers,
   });
 
-  // --- AUTO LOGOUT JIKA TOKEN BASI (401) ---
   if (response.status === 401) {
     localStorage.removeItem('posq_token');
-    // Redirect paksa ke login jika user tidak sedang di halaman login
     if (!window.location.pathname.includes('/login')) {
       window.location.href = '/login';
     }
@@ -35,15 +30,35 @@ export async function fetchAPI<T>(endpoint: string, options: RequestInit = {}): 
     throw new Error(errorData.message || `API Error: ${response.statusText}`);
   }
 
-  // Handle respons kosong (seperti 204 No Content)
   if (response.status === 204) return {} as T;
 
   return response.json();
 }
 
-// Export tipe-tipe data (UserProfile, dll) di sini juga...
-// (Biarkan tipe data yang sudah ada, tidak perlu dihapus)
-// --- ENUMS (Pilihan Nilai) ---
+// --- MOCK ExternalBlob ---
+export class ExternalBlob {
+  static fromBytes(bytes: Uint8Array): ExternalBlob {
+    return new ExternalBlob();
+  }
+  getDirectURL(): string {
+    return "";
+  }
+}
+
+// --- ENUMS & TYPES ---
+
+export enum AppRole {
+  owner = 'owner',
+  manager = 'manager',
+  cashier = 'cashier',
+  guest = 'customer',
+  admin = 'administrator',
+  user = 'subscriber',
+  customer = 'customer'
+}
+
+export { AppRole as UserRole };
+
 export enum PaymentCategory {
   offline = 'offline',
   online = 'online',
@@ -68,26 +83,18 @@ export enum OrderStatus {
   canceled = 'canceled'
 }
 
-export enum AppRole {
-  owner = 'owner',
-  manager = 'manager',
-  cashier = 'cashier'
-}
-
-// --- INTERFACES (Struktur Data Lengkap) ---
-
 export interface PaymentMethod {
   id: string;
   name: string;
   category: PaymentCategory;
   subCategory?: PaymentSubCategory;
-  methodName: string;
+  methodName: string; 
   amount?: bigint;
 }
 
 export interface TransactionItem {
   productId: bigint;
-  quantity: number;
+  quantity: number; // FIXED: number agar kompatibel dengan FE
   price: bigint;
   isPackage: boolean;
   isBundle: boolean;
@@ -145,7 +152,6 @@ export interface ProductPackage {
   outletId: bigint;
   createdAt: bigint;
   isActive: boolean;
-  isActivePackage?: boolean;
 }
 
 export interface BundleItem {
@@ -177,6 +183,7 @@ export interface UserProfile {
   name: string;
   role: AppRole;
   outletId?: bigint | null;
+  registeredAt?: bigint; // Added optional
 }
 
 export interface GuestCustomerData {
@@ -189,42 +196,24 @@ export interface GuestCustomerData {
 export interface MenuAccess {
   menu: string;
   isAccessible: boolean;
-}
-
-export interface MenuAccessConfig {
-  cashier: MenuAccess[];
-  manager: MenuAccess[];
-  owner: MenuAccess[];
-}
-
-export interface MenuAccessInput {
-  cashier: MenuAccess[];
-  manager: MenuAccess[];
-  owner: MenuAccess[];
-}
-
-export interface ProductRequest {
-  id?: bigint;
   name: string;
-  price: bigint;
-  stock: bigint;
-  outletId: bigint;
-  categoryId?: bigint;
-  brandId?: bigint;
 }
 
+// Dummy Interfaces
+export interface PaymentSettings { [key: string]: any }
+export interface OwnerProfile { [key: string]: any }
+export interface BusinessProfile { [key: string]: any }
+export interface PaymentProofVerification { [key: string]: any }
+export interface DatabaseExport { [key: string]: any }
+export interface ExpenseRequest { [key: string]: any }
+export interface CashflowSummary { totalIncome: bigint; totalExpenses: bigint; balance: bigint; }
+export interface Expense { id: bigint; amount: bigint; category: string; description: string; outletId: bigint; timestamp: bigint; }
+export interface OrderStatusHistoryEntry { status: OrderStatus; timestamp: bigint; }
 export interface StockLog {
   id: bigint;
   productId: bigint;
   outletId: bigint;
   quantity: bigint;
-  operation: 'add' | 'reduce' | 'transfer' | 'transaction';
+  operation: string;
   timestamp: bigint;
-  userId: string;
-}
-
-export interface DailySummary {
-  totalRevenue: bigint;
-  transactionCount: bigint;
-  date: bigint;
 }

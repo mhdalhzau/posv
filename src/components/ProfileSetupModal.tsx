@@ -60,7 +60,6 @@ export default function ProfileSetupModal() {
                   <SelectValue placeholder="Pilih role" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={AppRole.owner}>Owner</SelectItem>
                   <SelectItem value={AppRole.manager}>Manager</SelectItem>
                   <SelectItem value={AppRole.cashier}>Kasir</SelectItem>
                 </SelectContent>
